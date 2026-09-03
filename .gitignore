@@ -43,3 +43,4 @@ Prueba_tecnica_Fullstack_Cliente_Gobierno.pdf
 
 # Tipos federados generados por Module Federation en cada build.
 @mf-types/
+.mf/

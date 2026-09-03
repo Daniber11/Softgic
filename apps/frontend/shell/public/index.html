@@ -2,6 +2,22 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <!--
+      Imprescindible para una SPA con enrutamiento del lado del cliente.
+      Sin <base>, al recargar el navegador en una ruta profunda (por ejemplo
+      /solicitudes/{id}, el escenario A6) el <script src="main.js"> que
+      escribe HtmlRspackPlugin se resuelve RELATIVO a esa ruta actual
+      (quedaria pidiendo /solicitudes/main.js, un 404) en lugar de resolverse
+      contra la raiz del sitio. <base href="/"> fuerza toda resolucion de URL
+      relativa del documento -scripts, hojas de estilo- a partir de la raiz,
+      sin importar en que ruta profunda ocurrio la recarga.
+
+      No interfiere con Module Federation: las URLs de los remotos
+      (remoteEntry.js) se configuran como absolutas en rspack.config.js, y
+      publicPath: 'auto' sigue resolviendo los fragmentos en tiempo de
+      ejecucion igual que antes.
+    -->
+    <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Solicitudes Operacionales</title>
   </head>

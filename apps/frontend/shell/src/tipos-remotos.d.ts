@@ -19,3 +19,10 @@ declare module 'mfeIndicadores/IndicadoresApp' {
   export default IndicadoresApp;
 }
 
+// Constantes inyectadas por DefinePlugin en tiempo de compilacion (ver
+// rspack.config.js). Declararlas evita el `any` y hace que un valor faltante
+// rompa la compilacion en vez de fallar en produccion como 'undefined'.
+declare const __KEYCLOAK_ISSUER__: string;
+declare const __SOLICITUDES_API_URL__: string;
+declare const __INDICADORES_API_URL__: string;
+

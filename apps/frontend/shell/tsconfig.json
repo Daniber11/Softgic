@@ -20,7 +20,12 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/src", "vitest.config.ts", "vitest.setup.ts"]
 }

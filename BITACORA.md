@@ -367,3 +367,147 @@ Payload ilegible -> DLQ:
 
 ### Pendiente
 - Fase 5: Frontend completo sobre la base federada de la fase 2.
+
+---
+
+## Fase 5 — Interfaz completa sobre la base federada — 3 de septiembre de 2026
+
+### Completado
+- **Autenticación Authorization Code + PKCE** con `oidc-client-ts`, token en memoria
+  (`InMemoryWebStorage` envuelto en `WebStorageStateStore`, nunca `localStorage`/
+  `sessionStorage`), renovación silenciosa automática, y un `authBridge` expuesto por Module
+  Federation para que el remoto lea la sesión del shell sin duplicar el login.
+- **Capa de datos con RTK Query**: `createApi` + `fetchBaseQuery`, con `responseSchema` +
+  `catchSchemaFailure` (integración nativa Standard Schema de RTK Query 2.x) validando con Zod
+  **toda** respuesta del backend antes de que entre al estado. `Idempotency-Key` en la creación.
+- **Cinco vistas**: bandeja (filtros y paginación en la URL, no en estado local — un enlace
+  filtrado es compartible y sobrevive a un reload), creación (react-hook-form + zodResolver),
+  detalle (línea de tiempo + acciones condicionadas por rol y por estado), y el resumen
+  analítico federado en `mfe-indicadores`.
+- **`EstadoVista`** (paquete `shared`, documentado en Storybook): encapsula los cuatro estados
+  exigidos — cargando (`role="status"`), vacío, error con reintento (`role="alert"`) y
+  autorización insuficiente (`role="alert"`) — para que ninguna vista los reimplemente distinto.
+- **`EstadoChip`** (también en Storybook): color por estado/prioridad, única fuente de verdad
+  visual para ambos dominios.
+- **30 pruebas Vitest**: guardas de rol (`RutaProtegida`), validación Zod de formularios,
+  renderizado de la línea de tiempo, y los cinco estados de `EstadoVista`.
+- **Paquete `shared`** (`pnpm-workspace.yaml`) para que dominio, esquemas y componentes de
+  presentación se compartan entre `shell` y `mfe-indicadores` sin publicarse a un registro.
+
+### Verificado con
+```
+cd apps/frontend/shell && corepack pnpm exec tsc --noEmit         0 errores
+cd apps/frontend/mfe-indicadores && corepack pnpm exec tsc --noEmit  0 errores
+cd apps/frontend/shell && corepack pnpm test
+  Test Files  4 passed (4)
+  Tests  30 passed (30)
+cd apps/frontend/shell && corepack pnpm exec storybook build      Storybook build completed successfully
+cd apps/frontend/shell && corepack pnpm run build                 Rspack compiled (1 warning: tamaño de bundle)
+cd apps/frontend/mfe-indicadores && corepack pnpm run build        Federated types created correctly
+
+Navegador real, sesión analista1 (ficticio):
+  A6 — reload en /solicitudes/{id}: la sesión se recupera (POST /token real) y se
+       reobtienen tanto la lista como el detalle desde el backend (GET .../solicitudes y
+       GET .../solicitudes/{id} -> 200), no hay dato cacheado localmente que sobreviva.
+  Navegación directa a /indicadores como SOLICITANTE (rol insuficiente): se muestra
+       "Autorización insuficiente" con role="alert", nunca una pantalla en blanco.
+  Teclado: Tab recorre filtros -> enlaces de la tabla -> Enter activa el enlace enfocado
+       (navega). Foco trampeado dentro del diálogo "Agregar observación", Escape lo
+       cierra y devuelve el foco al botón que lo abrió.
+```
+
+### Defectos encontrados y corregidos
+1. **Module Federation duplicaba la instancia de `UserManager` entre shell y remoto.** El
+   `shared` de Module Federation solo aplica a paquetes de NPM declarados; `oidc-client-ts`
+   nunca se agregó ahí, así que el módulo expuesto `authBridge` recibía su propia copia
+   empaquetada de `authService.ts` y creaba un segundo `UserManager` que jamás veía el login
+   real. Diagnosticado inspeccionando `window.__FEDERATION__.__INSTANCES__` y el contenido
+   servido del chunk expuesto directamente desde la consola del navegador. Corregido con un
+   singleton verdadero vía `globalThis[Symbol.for(...)]`, que sobrevive a cualquier copia
+   duplicada del módulo.
+2. **Carrera de hidratación en `authBridge` incluso tras el fix anterior.** `getUser()` es
+   asíncrono; el primer `read` síncrono desde `useSesion.ts` en el remoto llegaba antes de que
+   la promesa resolviera. Suscribirse a `userLoaded` no alcanzaba porque ese evento ya había
+   disparado en el pasado y no se repite. Corregido exponiendo `authBridge.listo: Promise<void>`
+   y esperándolo antes de la primera lectura.
+3. **El cierre de sesión no terminaba la sesión real de Keycloak.** `cerrarSesion` llamaba solo
+   `removeUser()`; la cookie SSO de Keycloak seguía viva, así que el siguiente
+   `signinRedirect()` reautenticaba en silencio al mismo usuario. Corregido con
+   `signoutRedirect()`. Esto expuso una segunda carrera: `signoutRedirect()` dispara
+   `userUnloaded` antes de que su propia navegación termine, y `RutaProtegida` alcanzaba a
+   lanzar un `signinRedirect()` competidor que ganaba la carrera (visible en el log de red como
+   un logout `net::ERR_ABORTED` seguido de inmediato por un `/callback?code=...` nuevo).
+   Corregido con un `useRef` síncrono (`saliendoRef`) que `RutaProtegida` consulta antes de
+   redirigir — un `state` de React llega demasiado tarde para esta carrera.
+4. **Recargar en una ruta profunda (`/solicitudes/:id`) producía 404** (`Refused to execute
+   script... wrong MIME type`). `HtmlRspackPlugin` escribía `<script src="main.js">` relativo,
+   que se resolvía contra la ruta profunda en vez de la raíz. Es exactamente la clase de
+   defecto que el escenario A6 existe para atrapar, y no había aparecido antes porque toda
+   prueba previa usó navegación cliente, nunca una recarga real de navegador. Corregido con
+   `<base href="/" />` en ambas apps.
+5. **Fallo silencioso en el flujo de renovación silenciosa** ("IFrame timed out without a
+   response", bloqueando la carga inicial de la app). `CallbackPage` y el bootstrap standalone
+   llamaban `signinRedirectCallback()` sin condición, pero esa misma ruta también se carga
+   dentro del iframe oculto del renewal silencioso, donde la petición es de otro tipo.
+   Corregido usando `signinCallback()`, que despacha internamente según el tipo de solicitud
+   guardado.
+6. **Carrera entre el token y Redux bloqueaba la primera llamada a la API del remoto (401).**
+   React ejecuta los efectos del hijo antes que los del padre en el montaje, así que el fetch
+   de RTK Query en `ContenidoIndicadores` podía disparar antes de que el efecto del padre
+   despachara `tokenActualizado`. Un primer intento de arreglo con una bandera booleana de una
+   sola vez fue insuficiente: el doble-invocado de StrictMode podía fijarla en `true` durante un
+   render temprano con el token aún nulo. Corregido comparando el último token despachado
+   contra el de la sesión actual en cada render (`tokenDespachado === sesion.token`), no una
+   bandera que se fija una sola vez.
+7. **Estado anónimo federado indistinguible del estado de carga** ("Verificando sesión…" en
+   ambos), lo que habría escondido un bloqueo real detrás de un mensaje de "todo en orden
+   momentáneo". Corregido mostrando `estado="error"` con reintento para esa rama.
+8. **El foco no entraba al campo de texto al abrir `DialogoTexto`, pese al `autoFocus` de MUI.**
+   Con `multiline`, `TextareaAutosize` remonta el nodo tras medir su altura, y ese remonte
+   ocurre después de que el `Dialog` ya había puesto el foco ahí — el foco terminaba en el
+   contenedor del diálogo, no en el campo. Detectado navegando el diálogo por teclado en el
+   navegador real, no por inspección de código (el patrón parece correcto a simple vista).
+   Corregido con `inputRef` + `slotProps.transition.onEntered` (verificado contra
+   `Dialog.d.ts` de `@mui/material` 7.3.11 antes de usarlo), que fija el foco cuando la
+   transición de entrada ya terminó, después de cualquier remonte de `TextareaAutosize`.
+9. **`store.ts` de `mfe-indicadores` rompía la generación de tipos federados** (`TS4023:
+   Exported variable 'store' has or is using name 'EstadoAuth' ... but cannot be named`),
+   porque `authSlice.ts` no exportaba esa interfaz. No es un error de compilación normal —
+   `tsc --noEmit` pasaba porque nadie fuera del archivo nombra el tipo explícitamente— pero sí
+   rompía `@module-federation/dts-plugin` al generar las declaraciones para el módulo expuesto.
+   Corregido exportando `EstadoAuth`.
+10. Storybook 10.6 con `builder-webpack5` no trae ya un loader de JSX propio: el soporte nativo
+    de TypeScript de Webpack 5.110 (activo por defecto en Node ≥ 22.6) declara explícitamente
+    que no soporta `.tsx`. Corregido agregando `swc-loader` (coherente con el resto del
+    proyecto, que ya usa SWC vía rspack) en el `webpackFinal` de `.storybook/main.ts`, y
+    desactivando `reactDocgen` porque ese generador de props fallaba aparte
+    (`callback(): The callback was already called`) al analizar las props de unión
+    discriminada de `EstadoChip`.
+
+### Decisiones tomadas
+- **El token vive solo en memoria**, nunca en `localStorage`/`sessionStorage` (regla
+  `[BLOQUEANTE]` de CLAUDE.md): un espejo mínimo en Redux (`authSlice`, un solo campo) existe
+  únicamente para que `prepareHeaders` de RTK Query pueda leerlo de forma síncrona.
+- **`authBridge` singleton por `globalThis`/`Symbol.for`**, no por el mecanismo `shared` de
+  Module Federation: ese mecanismo solo cubre paquetes de NPM declarados, nunca módulos locales
+  de la aplicación.
+- **`RutaProtegida` valida el rol en el cliente solo para UX** (ocultar/mostrar); el backend
+  vuelve a decidir siempre (regla `[BLOQUEANTE]` #8) — así se documenta explícitamente en
+  `DetalleSolicitudPage.tsx`: qué botón se muestra es una predicción de usabilidad, no una
+  promesa de éxito.
+- **Sin librería de gráficos** en `mfe-indicadores`: `BarraSimple` es una barra propia con
+  `Box` de MUI. No estaba en el blueprint y el resumen analítico no lo necesita.
+
+### Riesgos abiertos
+- El bundle de `shell` y `mfe-indicadores` supera el límite recomendado de tamaño de asset
+  (~400-450 KiB por chunk) en el build de producción de rspack. No bloquea el reto pero es
+  candidato a `React.lazy` adicional o a revisar qué trae MUI si el reto pidiera optimizar carga.
+- El mismo patrón sin exportar (`interface EstadoAuth` no exportada) existe también en
+  `shell/src/store/authSlice.ts`; no falla porque `shell` no expone `store` vía Module
+  Federation, así que se deja igual (CLAUDE.md regla 14: no se refactoriza lo que funciona y
+  está fuera de la tarea actual).
+
+### Pendiente
+- Fase 6: cierre y entregables — Karate (A1, A3, recorrido REGISTRADA→EN_ATENCION→RESUELTA),
+  JaCoCo, Dockerfiles multi-stage, Helm (validado por contenedor), `.gitlab-ci.yml`, diagramas
+  C4 y de secuencia, los nueve ADRs, README con la estructura exigida, y `USO_DE_IA.md`.

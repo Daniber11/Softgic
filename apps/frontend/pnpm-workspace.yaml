@@ -1,0 +1,14 @@
+# Workspace de pnpm para el frontend.
+#
+# Existe por una razon puntual: `shared/src` se importa como codigo fuente
+# directo en shell y en mfe-indicadores (via alias de rspack), no como un
+# paquete publicado. Sin este workspace, TypeScript no puede resolver
+# `react`, `@mui/material` ni `zod` al tipar los archivos de `shared`,
+# porque la resolucion de modulos de Node camina hacia arriba desde CADA
+# archivo importador buscando su propio node_modules, y `shared/` no tenia
+# ninguno. El workspace hace que pnpm cree ese node_modules con enlaces al
+# almacen compartido, sin duplicar la instalacion.
+packages:
+  - shell
+  - mfe-indicadores
+  - shared

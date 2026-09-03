@@ -6,24 +6,32 @@
   "scripts": {
     "dev": "rspack serve",
     "build": "rspack build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
+    "@mui/icons-material": "7.3.11",
     "@mui/material": "7.3.11",
     "@reduxjs/toolkit": "2.12.0",
+    "oidc-client-ts": "3.5.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-redux": "9.3.0",
-    "react-router-dom": "7.18.3"
+    "react-router-dom": "7.18.3",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@module-federation/enhanced": "2.9.0",
     "@rspack/cli": "1.7.12",
     "@rspack/core": "1.7.12",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
-    "typescript": "5.9.3"
+    "jsdom": "30.0.1",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0"
   }
 }

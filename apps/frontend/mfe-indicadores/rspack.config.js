@@ -3,6 +3,10 @@
 //
 //  Expone ./IndicadoresApp para que el shell lo consuma por federacion, y a la
 //  vez arranca standalone en :3001 con su propio punto de montaje.
+//
+//  Consume `shell/authBridge` cuando corre federado. En modo standalone ese
+//  remoto no existe, por eso el codigo que lo usa (auth/useSesion.ts) solo lo
+//  importa dinamicamente cuando `modo === 'federado'`.
 // =============================================================================
 
 const path = require('node:path');
@@ -11,12 +15,19 @@ const { ModuleFederationPlugin } = require('@module-federation/enhanced/rspack')
 const { construirCompartidos } = require('../shared/federacion-compartida');
 const { dependencies } = require('./package.json');
 
-// El modo determina tambien el transform de JSX: con development:true SWC emite
-// llamadas a jsxDEV, que no existe en el runtime de produccion de React. Fijarlo
-// a mano rompe el build de produccion con una pantalla en blanco.
 const esProduccion = process.env.NODE_ENV === 'production';
 
 const PUERTO = 3001;
+const URL_SHELL = process.env.SHELL_URL ?? 'http://localhost:3000/remoteEntry.js';
+
+const VARIABLES_ENTORNO = {
+  __KEYCLOAK_ISSUER__: JSON.stringify(
+    process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/solicitudes-gov',
+  ),
+  __INDICADORES_API_URL__: JSON.stringify(
+    process.env.INDICADORES_API_URL ?? 'http://localhost:8082',
+  ),
+};
 
 module.exports = {
   entry: './src/index.ts',
@@ -32,6 +43,9 @@ module.exports = {
 
   resolve: {
     extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    alias: {
+      '@shared': path.resolve(__dirname, '../shared/src'),
+    },
   },
 
   module: {
@@ -60,11 +74,15 @@ module.exports = {
 
   plugins: [
     new rspack.HtmlRspackPlugin({ template: './public/index.html' }),
+    new rspack.DefinePlugin(VARIABLES_ENTORNO),
     new ModuleFederationPlugin({
       name: 'mfeIndicadores',
       filename: 'remoteEntry.js',
       exposes: {
         './IndicadoresApp': './src/IndicadoresApp.tsx',
+      },
+      remotes: {
+        shell: `shell@${URL_SHELL}`,
       },
       shared: construirCompartidos(dependencies),
     }),

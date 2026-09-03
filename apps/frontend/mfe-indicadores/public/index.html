@@ -2,6 +2,9 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <!-- Mismo motivo que en shell/public/index.html: sin esto, recargar en
+         /callback resolveria main.js relativo a esa ruta y devolveria 404. -->
+    <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MFE Indicadores (standalone)</title>
   </head>
