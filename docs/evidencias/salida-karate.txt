@@ -1,0 +1,22 @@
+Suite de aceptacion Karate — ejecutada contra el stack real levantado por
+`docker compose up -d` (los 7 servicios en estado healthy), el 3 de
+septiembre de 2026.
+
+Comando:
+  docker run --rm --network solicitudes-gov_solicitudes-red \
+    -v "$PWD":/app -v "$HOME/.m2":/root/.m2 -w /app \
+    maven:3.9-eclipse-temurin-21 mvn test \
+    -DbaseUrl=http://solicitudes-service:8081/api/v1 \
+    -DkeycloakTokenUrl=http://keycloak:8080/realms/solicitudes-gov/protocol/openid-connect/token
+
+Resultado (target/surefire-reports/solicitudes.SolicitudesRunnerTest.txt):
+-------------------------------------------------------------------------------
+Test set: solicitudes.SolicitudesRunnerTest
+-------------------------------------------------------------------------------
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 79.72 s -- in solicitudes.SolicitudesRunnerTest
+
+Cobertura por feature:
+  a1-registro-valido.feature       (2 escenarios) — A1: registro valido + idempotencia HTTP
+  a3-rol-insuficiente.feature      (2 escenarios) — A3: 403 sin efectos persistidos
+  recorrido-completo.feature       (2 escenarios) — REGISTRADA->EN_ATENCION->RESUELTA, + A4
+  obtener-categorias.feature / obtener-token.feature — utilitarios, llamados por los anteriores

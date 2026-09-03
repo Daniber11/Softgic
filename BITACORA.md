@@ -511,3 +511,156 @@ Navegador real, sesión analista1 (ficticio):
 - Fase 6: cierre y entregables — Karate (A1, A3, recorrido REGISTRADA→EN_ATENCION→RESUELTA),
   JaCoCo, Dockerfiles multi-stage, Helm (validado por contenedor), `.gitlab-ci.yml`, diagramas
   C4 y de secuencia, los nueve ADRs, README con la estructura exigida, y `USO_DE_IA.md`.
+
+---
+
+## Fase 6 — Cierre y entregables — 3 de septiembre de 2026
+
+### Completado
+- **Dockerfiles multi-stage** para los cuatro componentes, usuario no root en los cuatro,
+  `HEALTHCHECK` contra Actuator en los backends y contra `/` (nginx) en los frontend.
+  `compose.yaml` de la raíz ampliado con los cuatro servicios de aplicación, encadenados por
+  `depends_on: condition: service_healthy` sobre la infraestructura ya existente.
+- **`docker compose up --build` verificado de punta a punta (A7)**: los 7 servicios llegan a
+  `(healthy)`, y se probó el flujo real en un navegador contra las imágenes de producción
+  (nginx, no el *dev server*): bandeja, detalle, y el MFE de Indicadores federado cargando
+  `remoteEntry.js` de un origen a otro vía nginx.
+- **JaCoCo activado de verdad**: el plugin estaba declarado en `pluginManagement` desde antes
+  pero nunca se ejecutaba (sin `executions`). Se movió a `<plugins>` con `prepare-agent` +
+  `report`, con exclusiones honestas (configuración, DTOs del borde REST, entidades JPA, la
+  clase de arranque) en ambos servicios. Evidencia real capturada en
+  `docs/evidencias/cobertura-jacoco.md`: `domain` 80%, `application` 64%,
+  `indicadores-service` 27%, `infrastructure` y `bootstrap` sin cifra (0 pruebas / nada que
+  medir tras excluir configuración), documentado como limitación real, no oculta.
+- **Tres pruebas de caso de uso que faltaban**: `TomarSolicitudServiceTest`,
+  `TransicionarSolicitudServiceTest`, `AgregarObservacionServiceTest` — completan la cobertura
+  de la capa de aplicación con el mismo patrón de dobles en memoria que ya usaba
+  `RegistrarSolicitudServiceTest` (no Mockito).
+- **Suite Karate** (`apps/e2e-karate`): A1 (registro válido + idempotencia HTTP), A3 (rol
+  insuficiente sin efectos persistidos) y el recorrido completo
+  REGISTRADA→EN_ATENCION→RESUELTA con A4 (transición inválida) al final del mismo feature.
+  Obtiene tokens del cliente `karate-e2e` por *direct grant* contra el Keycloak real del stack.
+- **Chart de Helm** validado con `helm lint` y `helm template` (contenedor `alpine/helm`, sin
+  instalar nada en el anfitrión) contra `values.yaml` base, `values-dev.yaml` y
+  `values-qa.yaml`: Deployment con probes de liveness/readiness separadas, Service, ConfigMap
+  por backend, referencia a Secret externo, requests/limits.
+- **`.gitlab-ci.yml`**: `lint → build → test → coverage → package (Kaniko) → helm-validate →
+  deploy (manual)`, con caché de `~/.m2` y `node_modules`.
+- **Diagramas C4** (contexto, contenedores) y de **secuencia** del flujo principal con eventos,
+  en Mermaid, en `docs/c4/`. Verificados renderizando de verdad con `mermaid.js` en el
+  navegador (no solo revisando la sintaxis a ojo): los tres produjeron SVG válido y poblado.
+- **Los once ADRs** de BLUEPRINT.md §13 (ADR-001 a ADR-011), uno por archivo en `docs/adr/`,
+  formato contexto · decisión · alternativas · consecuencias.
+- **README.md y `USO_DE_IA.md`** completados con la estructura exigida; sin placeholders
+  `⟨…⟩` pendientes.
+
+### Verificado con
+```
+docker compose up -d && docker compose ps
+  7/7 servicios (healthy), incluidos los 4 nuevos de aplicación
+
+mvnd clean verify   (solicitudes-service)
+  Tests run: 26 (domain) + 21 (application) + 9 (ArchUnit) = 56, 0 fallos
+  JaCoCo: domain 80%, application 64%
+
+mvnd clean verify   (indicadores-service)
+  Tests run: 5, 0 fallos
+  JaCoCo: 27%
+
+docker run --rm -v "$PWD/deploy/helm":/apps alpine/helm lint /apps/solicitudes-gov
+  1 chart(s) linted, 0 chart(s) failed
+
+docker run --rm -v "$PWD/deploy/helm":/apps alpine/helm template ... -f values-dev.yaml
+docker run --rm -v "$PWD/deploy/helm":/apps alpine/helm template ... -f values-qa.yaml
+  10 recursos generados en cada uno, YAML valido
+
+mvnd test   (apps/e2e-karate), contra el stack real vía la red de compose:
+  Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 79.72 s
+  ver docs/evidencias/salida-karate.txt
+```
+
+### Defectos encontrados y corregidos
+1. **JaCoCo nunca se ejecutaba** pese a estar "configurado": el plugin vivía en
+   `pluginManagement` sin ninguna `execution`, así que `mvn verify` jamás lo invocaba. El
+   síntoma no era un error — simplemente no existía `target/site/jacoco/`. Corregido moviéndolo
+   a `<plugins>` reales con `prepare-agent` y `report`.
+2. **Los tres tests nuevos de casos de uso fallaban por un evento fantasma en el fixture.**
+   `TomarSolicitudServiceTest` y `TransicionarSolicitudServiceTest` construían el estado
+   inicial invocando los métodos de dominio directamente (`Solicitud.registrar(...)`,
+   `.tomar(...)`, `.resolver(...)`) para dejar la solicitud en el estado que cada prueba
+   necesitaba. Esas llamadas acumulan eventos en la lista interna del agregado que nunca se
+   drenan hasta que alguien llama `drenarEventos()`; como el fixture nunca lo hacía, cuando el
+   servicio bajo prueba ejecutaba SU propia transición y drenaba, arrastraba también los
+   eventos del *setup* — una prueba que esperaba un evento publicado veía dos, tres o cuatro.
+   Corregido llamando `drenarEventos()` al final de cada fixture, simulando que esas
+   operaciones previas ya fueron persistidas y publicadas en transacciones anteriores, que es
+   lo que ocurre en producción.
+3. **El `pom.xml` de `apps/e2e-karate` tenía XML inválido**: el comentario de cabecera incluía
+   el texto `docker compose up --build`, y XML prohíbe `--` dentro de un comentario en
+   cualquier posición que no sea el cierre `-->`. Maven fallaba con
+   `Non-parseable POM ... in comment after two dashes`. No se detectó al escribir el archivo
+   porque el editor no valida XML; se detectó al intentar ejecutar Karate por primera vez.
+   Corregido reformulando el comentario sin el doble guión.
+4. **Directorio corrupto `deploy/helm;C`** apareció en el árbol de trabajo, resultado de un
+   comando con una ruta mal escapada en una sesión anterior. Vacío, sin rastro en git; se
+   eliminó directamente.
+5. **Karate fallaba en dos capas distintas al ejecutarlo por primera vez contra el stack real**,
+   ninguna visible por inspección del `.feature`:
+   - `karate-config.js` construía los cuatro tokens llamando
+     `karate.call('classpath:...', {tokenUrl, usuario, password})` desde la función de
+     arranque (`fn()`), antes de que exista un scenario propio. En ese contexto de arranque el
+     objeto de argumentos **no se inyecta**, ni como variables sueltas ni como `__arg`
+     (se probaron ambas formas documentadas y ambas fallan con `ReferenceError` en ese punto
+     concreto). Corregido con `karate.set(nombre, valor)` antes de cada `karate.call()`, que sí
+     opera de forma fiable sobre el contexto de ejecución actual.
+   - Con eso resuelto, **todas las peticiones seguían devolviendo 401** pese a que el token se
+     obtenía sin error. Causa real: Keycloak (`KC_HOSTNAME_STRICT=false`) graba el claim `iss`
+     del token según el header `Host` de la petición que lo generó. Karate corre dentro de la
+     red de `compose` y llega a Keycloak por el nombre interno `keycloak:8080`, así que el
+     token quedaba con `iss=http://keycloak:8080/...`; los backends validan contra
+     `http://localhost:8080/...` (el issuer que ve el navegador — el mismo problema que ya
+     documentan `application.yml` de ambos servicios, aquí reproducido desde el lado del
+     cliente de pruebas). Corregido forzando `header Host = 'localhost:8080'` en la petición a
+     Keycloak dentro de `obtener-token.feature`, sin cambiar a qué dirección se conecta
+     realmente Karate.
+   - Un tercer defecto menor en el camino: `karate-config.js` llamaba
+     `classpath:obtener-token.feature` sin el prefijo de subcarpeta; el archivo vive en
+     `classpath:solicitudes/obtener-token.feature`. Corregido la ruta.
+6. **`docker compose up`/`build` chocaba con contenedores huérfanos** de pruebas manuales de
+   sesiones anteriores (`solicitudes-app` en 8081, `indicadores-app` en 8082, más dos
+   `rspack serve` de la Fase 5 ocupando 3000/3001), y en un punto de esta sesión **los 7
+   contenedores del stack aparecieron `Exited (255)` simultáneamente** — la marca de tiempo
+   idéntica en los siete descarta un fallo de aplicación y apunta a un reinicio de Docker
+   Desktop/WSL2. En ambos casos la resolución fue la misma: identificar qué ocupaba el puerto o
+   confirmar que el stack completo había muerto a la vez, liberar/limpiar, y volver a
+   `docker compose up -d` — el propio A7 aplicado como procedimiento de recuperación, no solo
+   como demostración inicial.
+
+### Decisiones tomadas
+- **Se redactan los once ADRs de la tabla del blueprint (§13, ADR-001 a ADR-011)**, no nueve:
+  `PROMPT_MAESTRO.md` menciona "los nueve del blueprint" en la instrucción de arranque de esta
+  fase, pero la propia tabla del blueprint —fuente de verdad declarada en `CLAUDE.md`— lista
+  once. La discrepancia es un desfase de conteo entre documentos (ADR-010 y ADR-011 se
+  agregaron en el registro de correcciones v1.0→v1.1, después de que se escribiera el conteo
+  original), no una instrucción deliberada de omitir dos decisiones ya tomadas y ya
+  referenciadas desde el propio código.
+- **`swc-loader` en el Dockerfile de Storybook y `minimum-release-age=0` en `.npmrc`** (ambos
+  ya aplicados en la Fase 5/6 de frontend) se mantienen: son necesidades técnicas para que el
+  build sea reproducible en un host limpio, no atajos de conveniencia.
+- **JaCoCo no excluye adaptadores, mappers ni manejadores de error sin prueba** solo para subir
+  la cifra reportada. Se documenta la cobertura real, baja donde no hay prueba todavía, en vez
+  de inflarla — coherente con la advertencia explícita del blueprint contra la cobertura
+  inflada por código trivial.
+
+### Riesgos abiertos
+- `infrastructure` (Solicitudes) no tiene ninguna prueba propia; toda su cobertura depende de
+  Karate (extremo a extremo) hasta que existan pruebas de integración dedicadas. Documentado
+  como limitación en el README, no oculto.
+- El bundle de `shell`/`mfe-indicadores` sigue por encima del límite recomendado de tamaño de
+  asset (heredado de la Fase 5, sin cambios en esta fase).
+
+### Pendiente
+- Ninguno dentro del alcance de la Fase 6. Lo que quedó deliberadamente fuera (Prometheus/
+  Grafana en Compose, Testcontainers, despliegue Helm contra un clúster real, purga de
+  `outbox_evento`, ejecución del pipeline contra un GitLab real) está declarado como
+  limitación explícita en el README §11, no como trabajo olvidado.

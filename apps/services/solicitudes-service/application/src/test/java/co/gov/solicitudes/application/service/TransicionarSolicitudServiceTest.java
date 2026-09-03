@@ -69,12 +69,17 @@ class TransicionarSolicitudServiceTest {
             new Actor("u-solicitante", Rol.SOLICITANTE),
             AHORA);
     solicitud.tomar(ANALISTA, AHORA);
+    // Se drena aqui: el fixture representa una solicitud ya persistida y
+    // publicada en operaciones previas (registro + toma), no una que el
+    // propio caso de uso bajo prueba acabara de crear.
+    solicitud.drenarEventos();
     return solicitud;
   }
 
   private static Solicitud solicitudResuelta() {
     Solicitud solicitud = solicitudEnAtencion();
     solicitud.resolver(ANALISTA, AHORA);
+    solicitud.drenarEventos();
     return solicitud;
   }
 

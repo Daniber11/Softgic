@@ -15,11 +15,14 @@ function fn() {
   };
 
   function obtenerToken(usuario) {
-    var resultado = karate.call('classpath:obtener-token.feature', {
-      tokenUrl: config.keycloakTokenUrl,
-      usuario: usuario,
-      password: 'Demo#2026'
-    });
+    // karate.set opera directamente sobre el contexto de ejecucion actual y
+    // es fiable incluso en tiempo de arranque (a diferencia de pasar un
+    // objeto de argumentos a karate.call, que en este contexto no se
+    // inyecta ni como variables sueltas ni como __arg).
+    karate.set('tokenUrl', config.keycloakTokenUrl);
+    karate.set('usuario', usuario);
+    karate.set('password', 'Demo#2026');
+    var resultado = karate.call('classpath:solicitudes/obtener-token.feature');
     return resultado.token;
   }
 

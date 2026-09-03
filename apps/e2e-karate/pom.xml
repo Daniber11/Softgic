@@ -7,7 +7,7 @@
   <!--
     Suite de aceptacion (Karate), independiente de los modulos Maven de cada
     servicio: no ejercita codigo Java directamente, ejercita el contrato HTTP
-    contra el stack ya levantado por `docker compose up --build`.
+    contra el stack ya levantado por "docker compose up" con reconstruccion.
 
     Estrategia de autenticacion: obtiene tokens del cliente `karate-e2e` por
     direct grant contra el Keycloak del stack local (karate-config.js). Ese

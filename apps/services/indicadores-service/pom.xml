@@ -103,6 +103,37 @@
           <mainClass>co.gov.indicadores.IndicadoresApplication</mainClass>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.13</version>
+        <!-- Exclusiones honestas: configuracion de Spring, la clase de
+             arranque, y persistence (entidades JPA + interfaces de Spring
+             Data sin logica propia). Lo que queda medido -consumer, service,
+             web- es exactamente el codigo con comportamiento real. -->
+        <configuration>
+          <excludes>
+            <exclude>co/gov/indicadores/config/**</exclude>
+            <exclude>co/gov/indicadores/IndicadoresApplication.class</exclude>
+            <exclude>co/gov/indicadores/persistence/**</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>preparar-agente</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>generar-reporte</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

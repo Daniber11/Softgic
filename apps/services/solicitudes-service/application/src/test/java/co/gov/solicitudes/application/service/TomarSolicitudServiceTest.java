@@ -54,15 +54,23 @@ class TomarSolicitudServiceTest {
   }
 
   private static Solicitud solicitudRegistrada() {
-    return Solicitud.registrar(
-        new SolicitudId(UUID.randomUUID()),
-        new CodigoSolicitud("SOL-2026-000001"),
-        "Impresora sin tinta",
-        "La impresora del piso 3 no imprime.",
-        new CategoriaId(UUID.randomUUID()),
-        Prioridad.MEDIA,
-        new Actor("u-solicitante", Rol.SOLICITANTE),
-        AHORA);
+    Solicitud solicitud =
+        Solicitud.registrar(
+            new SolicitudId(UUID.randomUUID()),
+            new CodigoSolicitud("SOL-2026-000001"),
+            "Impresora sin tinta",
+            "La impresora del piso 3 no imprime.",
+            new CategoriaId(UUID.randomUUID()),
+            Prioridad.MEDIA,
+            new Actor("u-solicitante", Rol.SOLICITANTE),
+            AHORA);
+    // El registro ya deja un SolicitudRegistrada pendiente en el agregado.
+    // Se drena aqui, como lo haria el adaptador de salida real tras la
+    // transaccion de registro, para que el fixture represente una solicitud
+    // ya persistida y publicada, no una recien creada en la misma operacion
+    // que el caso de uso bajo prueba.
+    solicitud.drenarEventos();
+    return solicitud;
   }
 
   @Test
