@@ -1,0 +1,138 @@
+{
+  "realm": "solicitudes-gov",
+  "displayName": "Solicitudes Operacionales (entorno local de demostración)",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "SOLICITANTE",
+        "description": "Registra solicitudes y consulta unicamente las propias"
+      },
+      {
+        "name": "ANALISTA",
+        "description": "Toma solicitudes de la bandeja, observa y resuelve"
+      },
+      {
+        "name": "SUPERVISOR",
+        "description": "Consulta todas las solicitudes, devuelve y cierra"
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "shell-web",
+      "name": "Shell SPA (host de microfrontends)",
+      "description": "Cliente publico del navegador. Authorization Code + PKCE S256, sin secreto.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3001"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:3001/*"
+      },
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "karate-e2e",
+      "name": "Karate E2E (EXCLUSIVO PARA PRUEBAS AUTOMATIZADAS)",
+      "description": "Cliente publico con direct grant habilitado. Existe unicamente para que la suite Karate obtenga tokens sin navegador. NO debe existir en un entorno productivo.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    }
+  ],
+
+  "users": [
+    {
+      "username": "solicitante1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "Solicitante Ficticio",
+      "email": "solicitante1@ejemplo.local",
+      "credentials": [
+        { "type": "password", "value": "Demo#2026", "temporary": false }
+      ],
+      "realmRoles": ["SOLICITANTE"]
+    },
+    {
+      "username": "analista1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "Analista Ficticio Uno",
+      "email": "analista1@ejemplo.local",
+      "credentials": [
+        { "type": "password", "value": "Demo#2026", "temporary": false }
+      ],
+      "realmRoles": ["ANALISTA"]
+    },
+    {
+      "username": "analista2",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "Analista Ficticio Dos",
+      "email": "analista2@ejemplo.local",
+      "credentials": [
+        { "type": "password", "value": "Demo#2026", "temporary": false }
+      ],
+      "realmRoles": ["ANALISTA"]
+    },
+    {
+      "username": "supervisor1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "Supervisor Ficticio",
+      "email": "supervisor1@ejemplo.local",
+      "credentials": [
+        { "type": "password", "value": "Demo#2026", "temporary": false }
+      ],
+      "realmRoles": ["SUPERVISOR"]
+    },
+    {
+      "username": "sinrol1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "Sin Rol Ficticio",
+      "email": "sinrol1@ejemplo.local",
+      "credentials": [
+        { "type": "password", "value": "Demo#2026", "temporary": false }
+      ],
+      "realmRoles": []
+    }
+  ]
+}

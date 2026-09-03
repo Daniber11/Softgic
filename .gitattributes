@@ -1,0 +1,8 @@
+# Los archivos se almacenan con LF en el repositorio. Sin esto, los scripts y
+# archivos SQL creados en Windows llegarian con CRLF a los contenedores Linux.
+* text=auto eol=lf
+
+# Binarios: no se tocan.
+*.pdf  binary
+*.jar  binary
+*.png  binary

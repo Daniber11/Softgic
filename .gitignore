@@ -1,0 +1,42 @@
+# Secretos — NUNCA se versionan. Solo se versiona .env.example con valores ficticios.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.rspack-cache/
+storybook-static/
+*.tsbuildinfo
+.pnpm-store/
+
+# Cobertura y reportes generados
+coverage/
+jacoco.exec
+**/site/jacoco/
+
+# IDE y sistema operativo
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Volúmenes locales de datos
+deploy/compose/data/
+
+# Enunciado del reto: no se versiona.
+# El PDF indica explicitamente que no se publique el reto en un repositorio.
+# Permanece en el directorio de trabajo, fuera del control de versiones.
+Prueba_tecnica_Fullstack_Cliente_Gobierno.pdf

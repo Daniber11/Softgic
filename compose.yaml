@@ -1,0 +1,152 @@
+# =============================================================================
+#  Plataforma de Gestion de Solicitudes Operacionales
+#
+#  Este archivo vive en la RAIZ y ningun servicio declara perfiles, para que el
+#  comando del enunciado sea suficiente por si solo (escenario A7, ADR-011):
+#
+#      docker compose up --build
+#
+#  Para levantar solo las dependencias durante el desarrollo, se nombran:
+#
+#      docker compose up -d sqlserver rabbitmq keycloak db-init
+#
+#  Las credenciales provienen de .env (copiado de .env.example) y son ficticias
+#  y de uso exclusivamente local.
+# =============================================================================
+
+name: solicitudes-gov
+
+services:
+
+  # ---------------------------------------------------------------------------
+  #  SQL Server 2022 - almacen operacional y analitico
+  #
+  #  mem_limit acotado: el anfitrion dispone de 8 GB para Docker y debe alojar
+  #  ademas Keycloak, RabbitMQ y dos JVM. Sin este limite SQL Server reclama
+  #  cuanta memoria encuentra y el arranque conjunto se vuelve inestable.
+  # ---------------------------------------------------------------------------
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: solicitudes-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD}
+      MSSQL_PID: Developer
+    ports:
+      - "${SQLSERVER_PORT:-1433}:1433"
+    volumes:
+      - sqlserver-datos:/var/opt/mssql
+    mem_limit: 2g
+    healthcheck:
+      # sqlcmd 18 exige -C: el certificado del servidor es autofirmado en local.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  db-init - servicio de un solo uso
+  #
+  #  La imagen de SQL Server arranca sin bases de aplicacion, y Flyway migra un
+  #  esquema pero no crea la base que lo contiene. Este contenedor cubre ese
+  #  hueco y termina. Reutiliza la imagen del servidor porque ya trae sqlcmd,
+  #  evitando descargar una imagen adicional solo para dos sentencias.
+  # ---------------------------------------------------------------------------
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: solicitudes-db-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      SQLSERVER_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD}
+    volumes:
+      - ./deploy/compose/db-init:/scripts:ro
+    # Se invoca a traves de bash de forma explicita: un entrypoint en forma de
+    # lista no pasa por un shell y la variable llegaria literal, sin expandir.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - '/opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P "$$SQLSERVER_SA_PASSWORD" -C -b -i /scripts/01-crear-bases.sql'
+    restart: "no"
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  RabbitMQ - transporte de eventos de dominio
+  #
+  #  La variante -management expone la UI en 15672. No es un lujo: es la
+  #  evidencia visual de reintentos y DLQ durante la demostracion en vivo.
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: solicitudes-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+    mem_limit: 512m
+    healthcheck:
+      # Sin --node: el nodo se llama rabbit@<hostname-del-contenedor>, no
+      # rabbit@localhost. Omitirlo hace que la herramienta resuelva el nodo local.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  Keycloak 26 - proveedor de identidad
+  #
+  #  start-dev con la base H2 embebida: es un entorno de demostracion local y
+  #  una base externa solo anadiria una dependencia mas al arranque (ADR-007).
+  #  --import-realm carga el realm exportado, de modo que roles, clientes y
+  #  usuarios de prueba existen desde el primer arranque sin pasos manuales.
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: solicitudes-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      # Habilita /health/ready en el puerto de administracion 9000, sin el cual
+      # no hay forma de encadenar un healthcheck determinista.
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+    mem_limit: 768m
+    healthcheck:
+      # La imagen no incluye curl ni wget. Se usa el descriptor /dev/tcp de bash
+      # contra el puerto de administracion.
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; grep -q '\"status\": \"UP\"' <&3"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [solicitudes-red]
+
+# =============================================================================
+#  Los servicios de aplicacion (solicitudes-service, indicadores-service, shell
+#  y mfe-indicadores) se incorporan en las fases 3 a 6, sin perfiles, de modo
+#  que el mismo comando siga bastando.
+# =============================================================================
+
+volumes:
+  sqlserver-datos:
+  rabbitmq-datos:
+
+networks:
+  solicitudes-red:
+    driver: bridge
