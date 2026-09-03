@@ -268,3 +268,102 @@ OpenAPI: 7 rutas documentadas, 8 esquemas
 
 ### Pendiente
 - Fase 4: Servicio de Indicadores, consumidor idempotente y escenario A5.
+
+---
+
+## Fase 4 — Servicio de Indicadores (modelo de lectura por eventos) — 3 de septiembre de 2026
+
+### Completado
+- **Un solo modulo Maven**, arquitectura en capas y no hexagonal (ADR-003): sin dominio que
+  proteger, separar puertos y adaptadores aqui solo habria agregado ceremonia.
+- **Migraciones del esquema estrella**: `hecho_transicion`, `dim_fecha` (poblada de forma
+  perezosa, no por rango fijo), `dim_categoria` (replicada, con fila `DESCONOCIDA` de respaldo),
+  `dim_estado` (con centinela `NINGUNO` para el registro), `dim_rol`.
+- **`TipoDeEvento`**: unica traduccion entre el nombre del hecho y las claves de dimension.
+  No es logica de negocio — el productor ya decidio si la transicion era valida.
+- **`ProyeccionService`**: consumo idempotente en una unica transaccion, con la marca de
+  procesado y la fila del hecho viviendo o muriendo juntas.
+- **Consumidor RabbitMQ** con topologia declarada tambien del lado del consumidor (idempotente
+  entre servicios), politica de reintento con exclusion de fallos deterministicos, y DLQ.
+- **Endpoints** `/resumen` y `/tendencia`, restringidos a ANALISTA/SUPERVISOR.
+- **CORS configurado tambien aqui**: no hay gateway, el navegador habla con los dos origenes.
+- **5 pruebas** del contrato de eventos, incluida la verificacion de que `SobreEvento.Datos` no
+  declara ningun campo de persona (ADR-005 verificado en el tipo, no solo en el comentario).
+
+### Verificado con
+```
+mvn test                          5 pruebas, 0 fallos
+
+Flujo completo Solicitudes -> Indicadores:
+  outbox_evento PUBLICADO: 27   hecho_transicion: 27   evento_procesado: 27   (en lockstep)
+  GET /resumen   {"porEstado":{"CERRADA":3,"REGISTRADA":5},"porCategoria":{...}}
+  GET /tendencia {"porDia":{"2026-09-03":8}}
+  SOLICITANTE contra /resumen -> 403 (la vista analitica es para quien atiende y supervisa)
+
+bash docs/evidencias/verificar-a5-idempotencia.sh -> docs/evidencias/salida-a5-idempotencia.txt
+  Reenvio de un evento YA PROCESADO, con su eventId original, vía la API de RabbitMQ
+  (equivalente a "Publish message" en la consola :15672):
+    resumen antes == resumen despues
+    hecho_transicion: 21 -> 21 (no crecio)
+    evento_procesado: 21 -> 21 (la clave primaria rechazo el duplicado)
+    DLQ: sin crecer con este reenvio (el duplicado se confirma, no es un error)
+    traza: "Evento SolicitudRegistrada ya estaba proyectado ... Se confirma sin alterar los conteos"
+  RESULTADO: A5 SE CUMPLE
+
+Payload ilegible -> DLQ:
+  Publicado un mensaje que no es JSON valido.
+  DLQ paso de N a N+1 en UN solo intento (log: una linea de error, "Retries exhausted"
+  10ms despues, sin backoff de 1s/2s).
+```
+
+### Defectos encontrados y corregidos
+1. **La idempotencia no funcionaba, aunque lo parecia.** `EventoProcesadoRepository` heredaba
+   `save()` de `JpaRepository`. Para una entidad con identificador ASIGNADO por fuera —aqui el
+   `eventId` lo genera el productor, la base no lo autogenera— Spring Data no puede saber si la
+   fila es nueva, asi que `save()` degenera en `merge()`: hace SELECT y, si existe, UPDATE. Nunca
+   se produce la violacion de clave primaria que el patron necesita.
+
+   **El sintoma era enganoso.** Al reenviar un evento duplicado, `evento_procesado` no crecia (lo
+   que parecia correcto) mientras `hecho_transicion` SI se insertaba de nuevo: la idempotencia
+   aparentaba funcionar sin hacerlo. Se detecto ejecutando el escenario A5 con datos reales, no
+   inspeccionando el codigo. Corregido con un `INSERT` nativo explicito (`insertarMarca`), cuya
+   semantica es inequivoca: o inserta, o revienta la transaccion.
+
+2. **Un mensaje ilegible se reintentaba 3 veces con backoff completo antes de llegar a la DLQ.**
+   El javadoc del consumidor afirmaba que `AmqpRejectAndDontRequeueException` evitaba el
+   reintento; es falso. El interceptor de retry de Spring AMQP envuelve cualquier excepcion que
+   salga del listener y solo decide "sin reencolar" cuando ya agoto los intentos — la excepcion
+   por si sola no acorta el camino. Se via en los logs: tres lineas de error separadas exactamente
+   por los intervalos de backoff configurados (1s, luego 2s).
+
+   Un JSON malformado no se arregla reintentandolo: es un fallo deterministico, no transitorio.
+   Corregido con un `RetryOperationsInterceptor` propio (`RabbitConfiguration`) cuya
+   `SimpleRetryPolicy` excluye explicitamente `AmqpRejectAndDontRequeueException`, instalado
+   sobre la factoria via `ContainerCustomizer` porque `SimpleRabbitListenerContainerFactory` no
+   expone `setAdviceChain` directamente. Verificado: ahora una linea de error, "Retries
+   exhausted" 10ms despues, sin demora.
+
+   Antes de escribir esta correccion se verificaron los nombres reales de clase contra el jar de
+   `spring-rabbit` descargado (`javap` sobre las clases extraidas), en vez de asumirlos de
+   memoria: `RetryInterceptorBuilder` y `SimpleRabbitListenerContainerFactory` viven en
+   `org.springframework.amqp.rabbit.config`, no en `.retry` ni `.listener` como se habria
+   asumido.
+
+### Decisiones tomadas
+- **`dim_fecha` se puebla de forma perezosa**, no por un rango sembrado en la migracion. Un rango
+  fijo se agota: el primer evento que llegara despues de la ultima fecha sembrada habria violado
+  la clave foranea y terminado en la DLQ sin razon de negocio.
+- **La topologia de RabbitMQ se declara tambien desde el consumidor**, duplicando la declaracion
+  del productor a proposito. Las declaraciones AMQP son idempotentes mientras coincidan; con solo
+  el productor declarandola, levantar Indicadores en solitario habria fallado por una cola
+  inexistente.
+- **El catalogo de categorias se replica en `dim_categoria`**, con una fila `DESCONOCIDA` de
+  respaldo. Es lo normal en un esquema en estrella y evita que una categoria aun no replicada
+  tumbe al consumidor.
+
+### Riesgos abiertos
+- Ninguno nuevo. El riesgo de `GeneradorCodigoAdapter` bajo concurrencia alta, documentado en la
+  fase 3, sigue vigente y no lo toca esta fase.
+
+### Pendiente
+- Fase 5: Frontend completo sobre la base federada de la fase 2.

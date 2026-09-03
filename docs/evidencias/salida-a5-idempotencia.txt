@@ -1,0 +1,37 @@
+==============================================================
+ ANTES del reenvio
+==============================================================
+  resumen          : {"porEstado":{"CERRADA":3,"REGISTRADA":3},"porCategoria":{"COORDINACION":1,"INFRAESTRUCTURA":1,"SOPORTE_TECNICO":4},"promedioMinutosHastaResolucion":0}
+  hecho_transicion : 21 filas
+  evento_procesado : 21 filas
+  dlq (referencia) : 2 mensajes
+
+==============================================================
+ Reenviando un evento ya procesado, con su eventId original
+==============================================================
+  eventId reenviado : 138adf60-4704-46d2-a996-2f5624cffdae
+  routing key       : solicitud.registrada
+  publicado en el exchange: {"routed":true}
+
+  Esperando a que el consumidor lo procese...
+
+==============================================================
+ DESPUES del reenvio
+==============================================================
+  resumen          : {"porEstado":{"CERRADA":3,"REGISTRADA":3},"porCategoria":{"COORDINACION":1,"INFRAESTRUCTURA":1,"SOPORTE_TECNICO":4},"promedioMinutosHastaResolucion":0}
+  hecho_transicion : 21 filas
+  evento_procesado : 21 filas
+
+==============================================================
+ VEREDICTO
+==============================================================
+  [OK] El resumen es identico: los conteos no se duplicaron.
+  [OK] hecho_transicion sigue en 21 filas: no se inserto el hecho.
+  [OK] evento_procesado sigue en 21: la clave primaria rechazo el duplicado.
+  [OK] La DLQ no crecio con este reenvio (2 -> 2): el duplicado se confirma, no es un error.
+
+  Traza del consumidor:
+    2026-09-03T14:44:40.739Z INFO  [a34096f1-123c-4b07-9e23-9342d54d3ca8] c.g.i.c.SolicitudEventoConsumer - Evento SolicitudRegistrada ya estaba proyectado (eventId 138adf60-4704-46d2-a996-2f5624cffdae). Se confirma sin alterar los conteos.
+    2026-09-03T14:45:26.290Z INFO  [a34096f1-123c-4b07-9e23-9342d54d3ca8] c.g.i.c.SolicitudEventoConsumer - Evento SolicitudRegistrada ya estaba proyectado (eventId 138adf60-4704-46d2-a996-2f5624cffdae). Se confirma sin alterar los conteos.
+
+  RESULTADO: A5 SE CUMPLE
