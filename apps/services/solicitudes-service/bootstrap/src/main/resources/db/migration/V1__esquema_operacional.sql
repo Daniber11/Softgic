@@ -8,6 +8,13 @@
 --  dominio; los identificadores tecnicos siguen la convencion relacional.
 -- =============================================================================
 
+-- Los indices filtrados (los que llevan WHERE) exigen estas dos opciones
+-- activas. El driver JDBC las activa por omision, pero sqlcmd no: fijarlas aqui
+-- hace que la migracion se comporte igual sea cual sea el cliente que la ejecute.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
 -- -----------------------------------------------------------------------------
 --  categoria - catalogo persistente consultado por el formulario de creacion
 -- -----------------------------------------------------------------------------

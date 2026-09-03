@@ -89,3 +89,13 @@ shell-web con grant_type=password  →  unauthorized_client  (correcto)
 - Fase 2: prueba de riesgo del microfrontend federado.
 - Los ADR se redactan en la fase 6, pero las decisiones ya están registradas arriba y en
   `BLUEPRINT.md` §17.
+
+### Correccion posterior a la verificacion
+5. **Los indices filtrados fallaban con `QUOTED_IDENTIFIER` incorrecto.** Detectado al
+   aplicar `V1` contra una base desechable antes de que Flyway exista. El driver JDBC
+   activa esa opcion por omision y el fallo habria pasado inadvertido hasta que alguien
+   ejecutara la migracion con otro cliente. Se fijan `SET QUOTED_IDENTIFIER ON` y
+   `SET ANSI_NULLS ON` al inicio de la migracion.
+
+   Verificado: `V1` y `V2` aplicadas sobre una base limpia crean 6 tablas, 8 indices y
+   6 semillas; la base de prueba se elimino despues.
