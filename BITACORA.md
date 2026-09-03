@@ -165,3 +165,106 @@ conservarlo, la salida es montar el remoto en su propia ruta.
 
 ### Pendiente
 - Fase 3: backend transaccional con arquitectura hexagonal.
+
+---
+
+## Fase 3 — Backend transaccional (Servicio de Solicitudes) — 3 de septiembre de 2026
+
+### Completado
+- **Maven multi-modulo** `domain / application / infrastructure / bootstrap`. El pom de `domain`
+  no declara ninguna dependencia de produccion.
+- **Dominio**: agregado `Solicitud`, tabla de transiciones en el enum `Accion`, value objects,
+  eventos como `sealed interface`, jerarquia de excepciones con codigo estable.
+- **26 pruebas de dominio escritas ANTES de la implementacion**, verificadas fallando primero.
+- **ArquitecturaTest (ArchUnit)**: 9 reglas que rompen el build.
+- **7 casos de uso**, clases planas sin anotaciones de Spring, cableados en `BeanConfiguration`.
+- **Persistencia JPA**: entidades separadas del dominio, mapper, `@Version`.
+- **Outbox transaccional** con `Propagation.MANDATORY` y publicador agendado con
+  `SELECT ... WITH (UPDLOCK, READPAST)`.
+- **REST**: controladores, DTOs, Problem Details RFC 9457, paginacion, 5 filtros,
+  filtro de `Idempotency-Key`.
+- **Seguridad**: Resource Server, conversor null-safe de authorities, `@PreAuthorize`, CORS.
+- **OpenAPI 3.1** generado por springdoc, exportado a `docs/openapi-solicitudes.json`.
+
+### Verificado con
+```
+mvn test                 43 pruebas, 0 fallos (26 dominio + 8 aplicacion + 9 ArchUnit)
+docker compose ps        infraestructura (healthy); servicio arrancado contra ella
+
+bash docs/evidencias/verificar-escenarios.sh   -> docs/evidencias/salida-escenarios-a1-a4.txt
+  A1  201  estado REGISTRADA, historial (inicio)->REGISTRADA
+  A2  analista1 201 EN_ATENCION / analista2 409 CONFLICTO_CONCURRENCIA  (en paralelo real)
+      Asignaciones exitosas: 1   Conflictos: 1   -> no hubo doble asignacion
+  A3  403 ACCION_NO_PERMITIDA, sin cambios persistidos ni eventos
+  A4  422 TRANSICION_INVALIDA "No se permite CERRAR sobre una solicitud en estado REGISTRADA"
+  Recorrido completo REGISTRADA->EN_ATENCION->RESUELTA->(DEVUELTA)->RESUELTA->CERRADA
+  Aislamiento por rol: solicitante1 ve 6 solicitudes, 0 de otros solicitantes
+
+Outbox:    20 filas, todas PUBLICADO, 0 FALLIDO
+RabbitMQ:  indicadores.solicitudes 20 mensajes, DLQ 0
+
+Idempotencia:
+  1a peticion             201  SOL-2026-000007
+  2a misma llave+cuerpo   201  MISMO id, sin duplicado en base
+  3a misma llave, otro cuerpo  409
+  Solicitudes con ese asunto en base: 1
+
+OpenAPI: 7 rutas documentadas, 8 esquemas
+```
+
+### Defectos encontrados y corregidos
+1. **`@Transactional` sobre un metodo `@Bean` no hace transaccional al objeto devuelto.** Spring
+   proxifica los metodos anotados de un bean, no la factoria que lo produce. Los casos de uso
+   corrian sin transaccion y el outbox se habria escrito fuera de ella. **No paso inadvertido
+   porque el adaptador del outbox declara `Propagation.MANDATORY`**: en vez de escribir eventos
+   sin transaccion, la primera peticion fallo senalando la causa. Corregido con decoradores
+   `TransactionTemplate` en el cableado, que caben en una lambda porque los puertos tienen un
+   solo metodo.
+2. **`LazyInitializationException` en las consultas.** Con `open-in-view: false` la sesion se
+   cierra al salir del metodo transaccional y las consultas no tenian ninguna. Corregido con una
+   `TransactionTemplate` de solo lectura.
+3. **N+1 latente en la bandeja.** El mapper cargaba historial y observaciones tambien en el
+   listado: hasta 101 consultas para pintar una tabla que no muestra esos datos. Corregido con
+   `aDominioResumen`.
+4. **Desajuste de tipos de fecha.** Hibernate 6 mapea `Instant` a `DATETIMEOFFSET`; las
+   migraciones usan `DATETIME2`. Lo detecto `ddl-auto: validate` al arrancar. Se fijo
+   `@JdbcTypeCode(SqlTypes.TIMESTAMP)`: todos los instantes son UTC por construccion, de modo que
+   una columna con desplazamiento guardaria siempre +00:00.
+5. **401 en vez de aceptar tokens validos.** El token lo emite `localhost:8080` pero el servicio,
+   dentro de la red Docker, resolvia `keycloak:8080`. Corregido separando `issuer-uri` (lo que se
+   valida) de `jwk-set-uri` (de donde se descargan las claves).
+6. **Formato de error inconsistente.** Los manejadores 401/403 usaban un `ObjectMapper` propio,
+   sin el mixin de ProblemDetail, y anidaban los campos bajo `properties` mientras la ruta MVC los
+   aplanaba. El cliente habria necesitado dos parsers. Corregido inyectando el `ObjectMapper` de
+   Spring.
+7. **`ContentCachingRequestWrapper` no sirve para pre-leer el cuerpo**: memoriza lo que otro lee,
+   no reproduce lo ya leido, y el controlador recibia "Required request body is missing".
+   Corregido con un envoltorio propio que devuelve un flujo nuevo sobre los mismos bytes.
+
+### Decisiones tomadas
+- **La tabla de transiciones vive en `Accion`, no en `EstadoSolicitud`.** Una accion necesita
+  declarar su estado de ORIGEN, no solo el destino: desde RESUELTA se llega a EN_ATENCION, pero
+  solo por DEVOLVER. Con una tabla por destino, TOMAR sobre una solicitud RESUELTA se habria
+  aceptado por error. Se aparta de la letra del blueprint y se documenta.
+- **`CambioEstado` es clase y no record**: dos campos son genuinamente opcionales y un record
+  obliga a que el accesor devuelva el tipo del componente.
+- **ArquitecturaTest: se corrigio la expresion de una regla, no su intencion.** Exigia que toda
+  entidad JPA viviera en `adapter.out.persistence` y fallaba con `OutboxEventoEntity`, que el
+  blueprint ubica a proposito en `adapter.out.messaging`. Se relajo a `adapter.out..`; el riesgo
+  real —que el controlador devuelva una entidad— lo cubre otra regla que si se conserva intacta.
+  Las otras dos violaciones se corrigieron moviendo CODIGO, no la prueba: `Filtro` y `Pagina`
+  salieron del paquete de puertos hacia `command` y `result`.
+- **La idempotencia se partio en dos**: el filtro HTTP en `adapter.in.rest`, la tabla en
+  `adapter.out.persistence`, unidos por la interfaz `RegistroIdempotencia` en terreno neutral.
+  Sin ella, el filtro habria violado la regla que prohibe al adaptador de entrada conocer el de
+  salida.
+
+### Riesgos abiertos
+- **`GeneradorCodigoAdapter` no es seguro bajo concurrencia alta**: calcula el consecutivo desde
+  el maximo del anio. La restriccion UNIQUE impide el duplicado, asi que el peor caso es un error,
+  no un codigo repetido. La solucion productiva es un SEQUENCE por anio. Declarado en el codigo.
+- Faltan pruebas de integracion con Testcontainers. La verificacion de A1-A4 es por script contra
+  el stack real, reproducible con un comando, pero no corre en CI sin infraestructura.
+
+### Pendiente
+- Fase 4: Servicio de Indicadores, consumidor idempotente y escenario A5.

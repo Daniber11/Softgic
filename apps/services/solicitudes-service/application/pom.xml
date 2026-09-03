@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    CASOS DE USO Y PUERTOS.
+
+    Depende solo del dominio. Tampoco conoce Spring: los casos de uso son clases
+    planas y es bootstrap quien las registra como beans. Asi el grafo de
+    dependencias queda explicito en un unico archivo y se puede leer.
+  -->
+
+  <parent>
+    <groupId>co.gov.solicitudes</groupId>
+    <artifactId>solicitudes-service</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>application</artifactId>
+  <name>Aplicacion</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>co.gov.solicitudes</groupId>
+      <artifactId>domain</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

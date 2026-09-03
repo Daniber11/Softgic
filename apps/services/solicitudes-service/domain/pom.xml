@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    NUCLEO DEL DOMINIO.
+
+    Este pom no declara NINGUNA dependencia de produccion, y esa ausencia es
+    intencional y esta verificada por ArquitecturaTest: sin Spring, sin JPA, sin
+    Jackson, sin Lombok, sin validacion de Jakarta. Solo Java 21.
+
+    Si alguien necesita agregar una aqui, la respuesta correcta casi siempre es
+    que la logica que la necesita no pertenece al dominio.
+
+    Las dependencias de prueba se heredan del padre en scope test, que no viaja
+    al artefacto y por tanto no viola la regla.
+  -->
+
+  <parent>
+    <groupId>co.gov.solicitudes</groupId>
+    <artifactId>solicitudes-service</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>domain</artifactId>
+  <name>Dominio</name>
+</project>

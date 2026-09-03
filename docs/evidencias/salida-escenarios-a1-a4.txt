@@ -1,0 +1,76 @@
+Obteniendo tokens de Keycloak...
+Tokens obtenidos para los cinco usuarios de prueba.
+
+==============================================================
+ A1  Solicitante autenticado registra datos validos
+ Esperado: 201, estado REGISTRADA, historial y evento creados
+==============================================================
+  HTTP 201
+  codigo    : SOL-2026-000006
+  estado    : REGISTRADA
+  analistaId: null
+  id        : 297fa780-f056-4b7c-8956-45d7abcc92f7
+
+==============================================================
+ A3  Usuario sin rol intenta cerrar
+ Esperado: 403 y ningun cambio persistido ni evento emitido
+==============================================================
+  HTTP 403
+  codigo    : ACCION_NO_PERMITIDA
+  title     : Autorizacion insuficiente
+  detail    : Su rol no permite ejecutar esta operacion.
+
+==============================================================
+ A4  Transicion imposible: CERRAR sobre una solicitud REGISTRADA
+ Esperado: 422 con Problem Details explicativo
+==============================================================
+  HTTP 422
+  codigo    : TRANSICION_INVALIDA
+  title     : Transicion no permitida
+  detail    : No se permite la accion CERRAR sobre una solicitud en estado REGISTRADA.
+
+==============================================================
+ A2  Dos analistas toman la misma solicitud EN PARALELO
+ Esperado: uno 201 y el otro 409, sin doble asignacion
+==============================================================
+  --- analista1 ---
+  HTTP 201
+  codigo    : SOL-2026-000006
+  estado    : EN_ATENCION
+  analistaId: b85fbe69-f3fc-4f44-a6dc-d006fca82abf
+  --- analista2 ---
+  HTTP 409
+  codigo    : CONFLICTO_CONCURRENCIA
+  title     : Conflicto de concurrencia
+  detail    : La solicitud fue modificada por otra operacion. Vuelva a consultarla y reintente.
+
+  Asignaciones exitosas : 1  (debe ser exactamente 1)
+  Conflictos 409        : 1  (debe ser exactamente 1)
+  RESULTADO: A2 se cumple, no hubo doble asignacion
+
+==============================================================
+ Recorrido completo REGISTRADA -> EN_ATENCION -> RESUELTA -> CERRADA
+==============================================================
+  observacion   -> HTTP 201
+  RESOLVER      -> HTTP 200
+  DEVOLVER      -> HTTP 200
+  RESOLVER      -> HTTP 200
+  CERRAR        -> HTTP 200
+
+==============================================================
+ Linea de tiempo final del expediente
+==============================================================
+  codigo: SOL-2026-000006   estado final: CERRADA
+    (inicio)     -> REGISTRADA   SOLICITANTE  
+    REGISTRADA   -> EN_ATENCION  ANALISTA     
+    EN_ATENCION  -> RESUELTA     ANALISTA     
+    RESUELTA     -> EN_ATENCION  SUPERVISOR   Falta adjuntar la evidencia de la validacion.
+    EN_ATENCION  -> RESUELTA     ANALISTA     
+    RESUELTA     -> CERRADA      SUPERVISOR   
+  observaciones: 1
+
+==============================================================
+ Aislamiento por rol: el solicitante solo ve lo suyo
+==============================================================
+  solicitudes visibles para solicitante1: 6
+  de otros solicitantes: 0 (debe ser 0)

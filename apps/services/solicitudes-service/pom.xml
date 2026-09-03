@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    Servicio de Solicitudes - arquitectura hexagonal estricta.
+
+    La separacion en cuatro modulos Maven NO es cosmetica: es el mecanismo que
+    hace imposible una dependencia invertida. El modulo domain no declara
+    ninguna dependencia de produccion, de modo que un import de Spring o de JPA
+    dentro del nucleo ni siquiera compila (ADR-008).
+
+        bootstrap -> infrastructure -> application -> domain
+  -->
+
+  <groupId>co.gov.solicitudes</groupId>
+  <artifactId>solicitudes-service</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>Servicio de Solicitudes</name>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.3</version>
+    <relativePath/>
+  </parent>
+
+  <modules>
+    <module>domain</module>
+    <module>application</module>
+    <module>infrastructure</module>
+    <module>bootstrap</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <springdoc.version>2.8.6</springdoc.version>
+    <archunit.version>1.3.2</archunit.version>
+    <jacoco.version>0.8.13</jacoco.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>co.gov.solicitudes</groupId>
+        <artifactId>domain</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>co.gov.solicitudes</groupId>
+        <artifactId>application</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>co.gov.solicitudes</groupId>
+        <artifactId>infrastructure</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        <version>${springdoc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.tngtech.archunit</groupId>
+        <artifactId>archunit-junit5</artifactId>
+        <version>${archunit.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- Disponible en todos los modulos: las pruebas son parte del entregable. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

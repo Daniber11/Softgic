@@ -1,0 +1,106 @@
+server:
+  port: ${SOLICITUDES_SERVICE_PORT:8081}
+  error:
+    # Nunca se expone la traza ni el mensaje por defecto: el manejador global
+    # construye todas las respuestas de error con RFC 9457.
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  application:
+    name: solicitudes-service
+
+  datasource:
+    url: jdbc:sqlserver://${SQLSERVER_HOST:localhost}:${SQLSERVER_PORT:1433};databaseName=${SQLSERVER_DB_OPERACIONAL:solicitudes_db};encrypt=true;trustServerCertificate=true
+    username: ${SQLSERVER_USER:sa}
+    password: ${SQLSERVER_SA_PASSWORD}
+    hikari:
+      # Presupuesto de conexiones acotado: el anfitrion comparte 8 GB entre
+      # SQL Server, Keycloak, RabbitMQ y dos JVM.
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      # Nunca 'update' ni 'create': el esquema lo gobierna Flyway, que es
+      # versionado y revisable. Dejar que Hibernate altere tablas haria que el
+      # esquema real dependiera del orden de arranque.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
+    # Publisher confirms: sin ellos, convertAndSend retorna sin saber si el
+    # broker acepto el mensaje, y el outbox marcaria como publicado algo perdido.
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Estas dos URL son distintas a proposito y resuelven un problema real.
+          #
+          # El token lo emite Keycloak con el issuer que vio el NAVEGADOR, es decir
+          # localhost:8080. El claim iss del token dice exactamente eso, y validarlo
+          # contra otra cosa produce 401 aunque el token sea perfectamente valido.
+          #
+          # Pero el servicio corre dentro de la red de Docker, donde localhost es el
+          # propio contenedor: para descargar las claves publicas necesita el nombre
+          # de servicio keycloak.
+          #
+          # issuer-uri  -> lo que se VALIDA contra el claim iss (vision del cliente)
+          # jwk-set-uri -> de donde se DESCARGAN las claves (vision del servidor)
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/solicitudes-gov}
+          jwk-set-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/solicitudes-gov/protocol/openid-connect/certs}
+
+solicitudes:
+  cors:
+    origenes-permitidos: ${CORS_ORIGENES_PERMITIDOS:http://localhost:3000,http://localhost:3001}
+  mensajeria:
+    exchange: solicitudes.events
+    exchange-dlx: solicitudes.events.dlx
+    cola-indicadores: indicadores.solicitudes
+    cola-indicadores-dlq: indicadores.solicitudes.dlq
+  outbox:
+    intervalo-ms: 500
+    tamanio-lote: 50
+    intentos-maximos: 3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+    co.gov.solicitudes: INFO
+  pattern:
+    # El correlationId viaja en el MDC y aparece en cada linea: es lo que permite
+    # seguir una operacion desde la peticion HTTP hasta la proyeccion analitica.
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{correlationId:-sin-correlacion}] %logger{36} - %msg%n"

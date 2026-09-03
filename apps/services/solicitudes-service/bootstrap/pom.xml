@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    ARRANQUE Y CABLEADO.
+
+    Es el unico modulo que ve el grafo completo, y por eso aloja tambien la
+    prueba de ArchUnit: solo desde aqui se pueden analizar las cuatro capas a la
+    vez y comprobar que ninguna dependencia apunta en sentido contrario.
+  -->
+
+  <parent>
+    <groupId>co.gov.solicitudes</groupId>
+    <artifactId>solicitudes-service</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>bootstrap</artifactId>
+  <name>Arranque</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>co.gov.solicitudes</groupId>
+      <artifactId>infrastructure</artifactId>
+    </dependency>
+
+    <!-- Versiones gestionadas por el BOM de Spring Boot: no se fijan a mano. -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-sqlserver</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.sqlserver</groupId>
+      <artifactId>mssql-jdbc</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>solicitudes-service</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <mainClass>co.gov.solicitudes.SolicitudesApplication</mainClass>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
