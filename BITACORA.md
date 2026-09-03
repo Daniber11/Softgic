@@ -99,3 +99,69 @@ shell-web con grant_type=password  →  unauthorized_client  (correcto)
 
    Verificado: `V1` y `V2` aplicadas sobre una base limpia crean 6 tablas, 8 indices y
    6 semillas; la base de prueba se elimino despues.
+
+---
+
+## Fase 2 — Prueba de riesgo del microfrontend federado — 2 de septiembre de 2026
+
+### Completado
+- `apps/frontend/shell` (host, :3000) y `apps/frontend/mfe-indicadores` (remoto, :3001)
+  con Rspack 1.7.12, React 19.2.8, MUI 7.3.11 y TypeScript 5.9.3 en modo estricto.
+- `apps/frontend/shared/federacion-compartida.js`: **lista unica** de modulos compartidos,
+  importada por ambas configuraciones. Duplicarla es la causa numero uno de desfase.
+- El remoto expone `./IndicadoresApp` y arranca standalone con su propio `ThemeProvider`.
+- `LimiteDeError`: el fallo de un remoto no deja el shell en blanco.
+- Contrato de tipos del remoto declarado a mano en `tipos-remotos.d.ts`, sin `any`.
+
+### Verificado con
+```
+pnpm exec tsc --noEmit          shell y remoto: sin errores, strict + noUncheckedIndexedAccess
+NODE_ENV=production pnpm build  ambos: 0 errores
+
+Build de produccion servido y abierto en el navegador:
+  share scope, 10 entradas (5 paquetes x 2 instancias), TODAS proveedor=shell
+    react 19.2.8 · react-dom 19.2.8 · @emotion/react 11.14.0
+    @emotion/styled 11.14.1 · @mui/material 7.3.11
+  caches de Emotion distintos: ["css-global","css"]   (los dos estandar de MUI, sin duplicar)
+  recursos descargados del remoto: ["remoteEntry.js","__federation_expose_IndicadoresApp.js"]
+    -> ningun vendor chunk: el remoto consume TODO del host
+  color primario leido por el remoto: #1565c0  (el del host, no el suyo)
+  consola: sin mensajes
+
+Standalone en :4001  -> tema propio #6a1b9a, estilos aplicados, consola limpia
+Remoto caido         -> el shell sobrevive y muestra error accionable
+Remoto restaurado + reintentar -> el remoto vuelve a montar
+```
+
+### Defectos encontrados y corregidos
+1. **MUI se empaquetaba dos veces.** Las importaciones profundas (`@mui/material/Alert`)
+   no casan con la clave compartida `@mui/material`: son especificadores distintos. No
+   fallaba nada a la vista porque el tema lo transporta Emotion, que si era unico.
+   Corregido pasando a importaciones del barril. Se probo antes la clave `'@mui/material/'`
+   y se descarto: el manifiesto la expande por submodulo pero esas entradas nunca llegan
+   al share scope, o sea configuracion muerta que aparenta resolver el problema.
+2. **MUI seguia sin registrarse pese al barril.** MUI 7 resuelve a
+   `@mui/material/esm/index.js` y ese subdirectorio no tiene `package.json` con version,
+   asi que Module Federation no podia deducirla y descartaba el modulo en silencio.
+   Corregido declarando `version` ademas de `requiredVersion`.
+3. **Pantalla en blanco en el build de produccion.** El transform de SWC llevaba
+   `development: true` fijo, de modo que produccion emitia llamadas a `jsxDEV`, que no
+   existe en el runtime de produccion de React. Corregido derivandolo del modo.
+4. **`noImplicitOverride` detecto un `render` sin `override`** en el limite de error.
+
+### Riesgo cerrado
+El mayor riesgo del proyecto queda **mitigado y verificado**: Module Federation sobre
+Rspack funciona con React 19 y MUI 7, con singleton real comprobado en el share scope y no
+solo por inspeccion visual.
+
+### Limitacion documentada
+**El reintento en caliente de un remoto caido no es viable.** El fallo se memoiza en tres
+niveles: `React.lazy`, el runtime de Module Federation y el module cache del bundler. Se
+resolvieron los dos primeros —`React.lazy` nuevo por intento y `registerRemotes` con
+`force: true`— y el tercero siguio devolviendo el modulo invalido, con React fallando en
+el error #306. El reintento recarga la pagina, que es lo unico que limpia los tres. En la
+fase 2 no hay estado que perder; para la fase 5 queda anotado que, si se quisiera
+conservarlo, la salida es montar el remoto en su propia ruta.
+
+### Pendiente
+- Fase 3: backend transaccional con arquitectura hexagonal.
