@@ -1,0 +1,311 @@
+# =============================================================================
+#  Pipeline: lint -> build -> test -> coverage -> package (Kaniko) ->
+#            helm-validate -> deploy (manual)
+#
+#  Kaniko en lugar de Docker-in-Docker: DinD exige un contenedor privilegiado
+#  (--privileged) para que el daemon de Docker corra dentro del propio job de
+#  CI, lo que en la practica le da al job acceso de root al host del runner.
+#  Kaniko construye la imagen sin daemon y sin privilegios elevados,
+#  interpretando el Dockerfile directamente contra el registro de destino.
+#
+#  No hay un GitLab real conectado a este repositorio en el entorno de
+#  evaluacion: este archivo se valida sintacticamente (yamllint / parser YAML)
+#  y por revision, no por una ejecucion real contra runners. Se documenta con
+#  la misma honestidad que el resto del proyecto exige (ver README, seccion
+#  CI/CD).
+# =============================================================================
+
+stages:
+  - lint
+  - build
+  - test
+  - coverage
+  - package
+  - helm-validate
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  MAVEN_CLI_OPTS: "-B -q"
+  DOCKER_IMAGEN_MAVEN: "maven:3.9-eclipse-temurin-21"
+  DOCKER_IMAGEN_NODE: "node:24-alpine"
+
+.cache_maven: &cache_maven
+  key:
+    files:
+      - apps/services/solicitudes-service/pom.xml
+      - apps/services/indicadores-service/pom.xml
+  paths:
+    - .m2/repository
+  policy: pull-push
+
+.cache_pnpm: &cache_pnpm
+  key:
+    files:
+      - apps/frontend/pnpm-lock.yaml
+  paths:
+    - apps/frontend/node_modules
+    - apps/frontend/shell/node_modules
+    - apps/frontend/mfe-indicadores/node_modules
+    - apps/frontend/shared/node_modules
+  policy: pull-push
+
+# =============================================================================
+#  LINT
+# =============================================================================
+
+lint:frontend:
+  stage: lint
+  image: $DOCKER_IMAGEN_NODE
+  cache: *cache_pnpm
+  before_script:
+    - corepack enable
+    - cd apps/frontend && corepack pnpm install --frozen-lockfile
+  script:
+    # No hay ESLint configurado en el proyecto (fuera del alcance aprobado,
+    # ver politica de recorte del blueprint); el chequeo estatico real que
+    # existe y que la constitucion exige ("strict: true, prohibido any") es
+    # el typecheck de TypeScript, que aqui hace las veces de lint.
+    - cd shell && corepack pnpm exec tsc --noEmit
+    - cd ../mfe-indicadores && corepack pnpm exec tsc --noEmit
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+lint:backend:
+  stage: lint
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  script:
+    # `mvn validate` valida el pom.xml y la estructura del proyecto sin
+    # compilar: es el chequeo mas barato posible antes de comprometer tiempo
+    # de pipeline en una compilacion completa.
+    - cd apps/services/solicitudes-service && mvn $MAVEN_CLI_OPTS validate
+    - cd ../indicadores-service && mvn $MAVEN_CLI_OPTS validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# =============================================================================
+#  BUILD
+# =============================================================================
+
+build:solicitudes-service:
+  stage: build
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  script:
+    - cd apps/services/solicitudes-service && mvn $MAVEN_CLI_OPTS clean compile
+  artifacts:
+    paths:
+      - apps/services/solicitudes-service/*/target/classes
+    expire_in: 1 hour
+
+build:indicadores-service:
+  stage: build
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  script:
+    - cd apps/services/indicadores-service && mvn $MAVEN_CLI_OPTS clean compile
+  artifacts:
+    paths:
+      - apps/services/indicadores-service/target/classes
+    expire_in: 1 hour
+
+build:frontend:
+  stage: build
+  image: $DOCKER_IMAGEN_NODE
+  cache: *cache_pnpm
+  before_script:
+    - corepack enable
+    - cd apps/frontend && corepack pnpm install --frozen-lockfile
+  script:
+    - export NODE_ENV=production
+    - cd shell && corepack pnpm run build
+    - cd ../mfe-indicadores && corepack pnpm run build
+  artifacts:
+    paths:
+      - apps/frontend/shell/dist
+      - apps/frontend/mfe-indicadores/dist
+    expire_in: 1 hour
+
+# =============================================================================
+#  TEST  (incluye la prueba ArchUnit que hace fallar el build ante una
+#  violacion de la regla de dependencia — bootstrap -> infrastructure ->
+#  application -> domain, ver ADR-008)
+# =============================================================================
+
+test:solicitudes-service:
+  stage: test
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  script:
+    - cd apps/services/solicitudes-service && mvn $MAVEN_CLI_OPTS test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "apps/services/solicitudes-service/*/target/surefire-reports/TEST-*.xml"
+    paths:
+      - apps/services/solicitudes-service/*/target/jacoco.exec
+    expire_in: 1 hour
+
+test:indicadores-service:
+  stage: test
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  script:
+    - cd apps/services/indicadores-service && mvn $MAVEN_CLI_OPTS test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "apps/services/indicadores-service/target/surefire-reports/TEST-*.xml"
+    expire_in: 1 hour
+
+test:frontend:
+  stage: test
+  image: $DOCKER_IMAGEN_NODE
+  cache: *cache_pnpm
+  before_script:
+    - corepack enable
+    - cd apps/frontend && corepack pnpm install --frozen-lockfile
+  script:
+    - cd shell && corepack pnpm test
+  artifacts:
+    when: always
+    expire_in: 1 hour
+
+# =============================================================================
+#  COVERAGE  (JaCoCo — exclusiones honestas declaradas en cada pom.xml:
+#  configuracion, DTOs, entidades JPA; ver README seccion "Pruebas")
+# =============================================================================
+
+coverage:backend:
+  stage: coverage
+  image: $DOCKER_IMAGEN_MAVEN
+  cache: *cache_maven
+  needs:
+    - test:solicitudes-service
+    - test:indicadores-service
+  script:
+    - cd apps/services/solicitudes-service && mvn $MAVEN_CLI_OPTS verify -DskipTests
+    - cd ../indicadores-service && mvn $MAVEN_CLI_OPTS verify -DskipTests
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    paths:
+      - apps/services/solicitudes-service/*/target/site/jacoco
+      - apps/services/indicadores-service/target/site/jacoco
+    expire_in: 30 days
+
+# =============================================================================
+#  PACKAGE  (Kaniko: sin Docker-in-Docker, sin contenedor privilegiado)
+# =============================================================================
+
+.kaniko_build: &kaniko_build
+  stage: package
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+package:solicitudes-service:
+  <<: *kaniko_build
+  needs: ["test:solicitudes-service"]
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/services/solicitudes-service"
+      --dockerfile "${CI_PROJECT_DIR}/apps/services/solicitudes-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/solicitudes-service:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/solicitudes-service:latest"
+
+package:indicadores-service:
+  <<: *kaniko_build
+  needs: ["test:indicadores-service"]
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/services/indicadores-service"
+      --dockerfile "${CI_PROJECT_DIR}/apps/services/indicadores-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/indicadores-service:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/indicadores-service:latest"
+
+package:shell:
+  <<: *kaniko_build
+  needs: ["test:frontend"]
+  script:
+    # Contexto apps/frontend/ completo: shell resuelve @shared contra
+    # ../shared/src en build (ver comentario identico en shell/Dockerfile).
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/frontend"
+      --dockerfile "${CI_PROJECT_DIR}/apps/frontend/shell/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/shell:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/shell:latest"
+
+package:mfe-indicadores:
+  <<: *kaniko_build
+  needs: ["test:frontend"]
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/frontend"
+      --dockerfile "${CI_PROJECT_DIR}/apps/frontend/mfe-indicadores/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/mfe-indicadores:${CI_COMMIT_SHORT_SHA}"
+      --destination "${CI_REGISTRY_IMAGE}/mfe-indicadores:latest"
+
+# =============================================================================
+#  HELM-VALIDATE  (mismo comando documentado en el README y en CLAUDE.md:
+#  Helm tampoco se instala en el runner, se ejecuta por imagen)
+# =============================================================================
+
+helm-validate:
+  stage: helm-validate
+  image:
+    name: alpine/helm:latest
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - helm lint deploy/helm/solicitudes-gov
+    - helm template solicitudes-gov deploy/helm/solicitudes-gov -f deploy/helm/solicitudes-gov/values-dev.yaml
+    - helm template solicitudes-gov deploy/helm/solicitudes-gov -f deploy/helm/solicitudes-gov/values-qa.yaml
+
+# =============================================================================
+#  DEPLOY  (manual a proposito: el blueprint documenta la promocion entre
+#  ambientes pero el reto no exige un cluster real de destino)
+# =============================================================================
+
+deploy:dev:
+  stage: deploy
+  image:
+    name: alpine/helm:latest
+    entrypoint: [""]
+  needs: ["package:solicitudes-service", "package:indicadores-service", "package:shell", "package:mfe-indicadores", "helm-validate"]
+  environment:
+    name: dev
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - helm upgrade --install solicitudes-gov deploy/helm/solicitudes-gov
+      -f deploy/helm/solicitudes-gov/values-dev.yaml
+      --set imagen.registro=${CI_REGISTRY_IMAGE}
+      --set imagen.etiqueta=${CI_COMMIT_SHORT_SHA}
+      --namespace solicitudes-gov-dev
+      --create-namespace
+
+deploy:qa:
+  stage: deploy
+  image:
+    name: alpine/helm:latest
+    entrypoint: [""]
+  needs: ["deploy:dev"]
+  environment:
+    name: qa
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - helm upgrade --install solicitudes-gov deploy/helm/solicitudes-gov
+      -f deploy/helm/solicitudes-gov/values-qa.yaml
+      --set imagen.registro=${CI_REGISTRY_IMAGE}
+      --set imagen.etiqueta=${CI_COMMIT_SHORT_SHA}
+      --namespace solicitudes-gov-qa
+      --create-namespace

@@ -137,11 +137,117 @@ services:
       start_period: 30s
     networks: [solicitudes-red]
 
-# =============================================================================
-#  Los servicios de aplicacion (solicitudes-service, indicadores-service, shell
-#  y mfe-indicadores) se incorporan en las fases 3 a 6, sin perfiles, de modo
-#  que el mismo comando siga bastando.
-# =============================================================================
+  # ---------------------------------------------------------------------------
+  #  Servicio de Solicitudes - arquitectura hexagonal, puerto 8081
+  # ---------------------------------------------------------------------------
+  solicitudes-service:
+    build:
+      context: ./apps/services/solicitudes-service
+    container_name: solicitudes-service
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      SOLICITUDES_SERVICE_PORT: 8081
+      SQLSERVER_HOST: sqlserver
+      SQLSERVER_PORT: 1433
+      SQLSERVER_DB_OPERACIONAL: ${SQLSERVER_DB_OPERACIONAL:-solicitudes_db}
+      SQLSERVER_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      # issuer-uri se valida contra el claim "iss" del token, que el navegador
+      # emitio contra localhost; jwk-set-uri es de contenedor a contenedor
+      # (ver el comentario identico en application.yml).
+      KEYCLOAK_ISSUER_URI: http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-solicitudes-gov}
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM:-solicitudes-gov}/protocol/openid-connect/certs
+      CORS_ORIGENES_PERMITIDOS: ${CORS_ORIGENES_PERMITIDOS:-http://localhost:3000,http://localhost:3001}
+      JVM_MAX_RAM_PERCENTAGE: ${JVM_MAX_RAM_PERCENTAGE:-60}
+    ports:
+      - "${SOLICITUDES_SERVICE_PORT:-8081}:8081"
+    mem_limit: 768m
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  Servicio de Indicadores - modelo de lectura por eventos, puerto 8082
+  # ---------------------------------------------------------------------------
+  indicadores-service:
+    build:
+      context: ./apps/services/indicadores-service
+    container_name: indicadores-service
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      INDICADORES_SERVICE_PORT: 8082
+      SQLSERVER_HOST: sqlserver
+      SQLSERVER_PORT: 1433
+      SQLSERVER_DB_ANALITICA: ${SQLSERVER_DB_ANALITICA:-indicadores_db}
+      SQLSERVER_SA_PASSWORD: ${SQLSERVER_SA_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      KEYCLOAK_ISSUER_URI: http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-solicitudes-gov}
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/${KEYCLOAK_REALM:-solicitudes-gov}/protocol/openid-connect/certs
+      CORS_ORIGENES_PERMITIDOS: ${CORS_ORIGENES_PERMITIDOS:-http://localhost:3000,http://localhost:3001}
+      JVM_MAX_RAM_PERCENTAGE: ${JVM_MAX_RAM_PERCENTAGE:-60}
+    ports:
+      - "${INDICADORES_SERVICE_PORT:-8082}:8082"
+    mem_limit: 768m
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  Shell - host de microfrontends, puerto 3000
+  #
+  #  El contexto de build es apps/frontend/ COMPLETO (no apps/frontend/shell/):
+  #  el shell resuelve @shared contra ../shared/src y pnpm necesita ver los
+  #  tres package.json del workspace para instalar de forma consistente con
+  #  el lockfile compartido.
+  # ---------------------------------------------------------------------------
+  shell:
+    build:
+      context: ./apps/frontend
+      dockerfile: shell/Dockerfile
+    container_name: shell
+    depends_on:
+      solicitudes-service:
+        condition: service_healthy
+      indicadores-service:
+        condition: service_healthy
+    ports:
+      - "${SHELL_PORT:-3000}:8080"
+    mem_limit: 128m
+    networks: [solicitudes-red]
+
+  # ---------------------------------------------------------------------------
+  #  MFE Indicadores - microfrontend remoto, puerto 3001
+  # ---------------------------------------------------------------------------
+  mfe-indicadores:
+    build:
+      context: ./apps/frontend
+      dockerfile: mfe-indicadores/Dockerfile
+    container_name: mfe-indicadores
+    depends_on:
+      indicadores-service:
+        condition: service_healthy
+    ports:
+      - "${MFE_INDICADORES_PORT:-3001}:8080"
+    mem_limit: 128m
+    networks: [solicitudes-red]
 
 volumes:
   sqlserver-datos:

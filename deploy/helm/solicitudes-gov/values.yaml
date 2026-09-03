@@ -1,0 +1,84 @@
+# =============================================================================
+#  Valores por defecto. values-dev.yaml y values-qa.yaml sobrescriben lo que
+#  cambia por ambiente (replicas, recursos, host de ingreso).
+#
+#  Credenciales: NUNCA en este archivo. `externo.secretName` referencia un
+#  Secret que YA EXISTE en el cluster (creado fuera del chart, por ejemplo con
+#  `kubectl create secret generic solicitudes-gov-credenciales --from-env-file=.env`
+#  o por un gestor de secretos externo). El chart nunca declara un recurso
+#  Secret con valores reales.
+# =============================================================================
+
+imagen:
+  registro: registry.local
+  # Con Kaniko en CI, la etiqueta real es el SHA corto del commit (ver
+  # .gitlab-ci.yml); "latest" aqui es solo el valor de desarrollo local.
+  etiqueta: latest
+  politicaDeDescarga: IfNotPresent
+
+externo:
+  # Nombre del Secret pre-existente con las credenciales de SQL Server,
+  # RabbitMQ y Keycloak. El chart solo lo referencia via secretKeyRef; jamas
+  # lo crea ni lo modifica.
+  secretName: solicitudes-gov-credenciales
+  sqlserverHost: sqlserver.solicitudes-gov.svc.cluster.local
+  sqlserverPort: "1433"
+  rabbitmqHost: rabbitmq.solicitudes-gov.svc.cluster.local
+  rabbitmqPort: "5672"
+  keycloakIssuerUri: https://identidad.ejemplo.local/realms/solicitudes-gov
+  keycloakJwksUri: http://keycloak.solicitudes-gov.svc.cluster.local:8080/realms/solicitudes-gov/protocol/openid-connect/certs
+  corsOrigenesPermitidos: https://app.ejemplo.local
+
+solicitudesService:
+  nombre: solicitudes-service
+  puerto: 8081
+  replicas: 1
+  imagen: solicitudes-service
+  sqlserverDb: solicitudes_db
+  recursos:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+
+indicadoresService:
+  nombre: indicadores-service
+  puerto: 8082
+  replicas: 1
+  imagen: indicadores-service
+  sqlserverDb: indicadores_db
+  recursos:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+
+shell:
+  nombre: shell
+  puerto: 8080
+  replicas: 1
+  imagen: shell
+  recursos:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 128Mi
+
+mfeIndicadores:
+  nombre: mfe-indicadores
+  puerto: 8080
+  replicas: 1
+  imagen: mfe-indicadores
+  recursos:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 128Mi

@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.solicitudesService.nombre }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.solicitudesService.nombre }}
+    {{- include "solicitudes-gov.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.solicitudesService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.solicitudesService.nombre }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.solicitudesService.nombre }}
+        {{- include "solicitudes-gov.labels" . | nindent 8 }}
+    spec:
+      # La imagen ya corre como usuario no root (ver Dockerfile); se declara
+      # tambien aqui para que el scheduler lo exija incluso si la imagen
+      # cambiara y alguien olvidara el USER en el Dockerfile.
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: {{ .Values.solicitudesService.nombre }}
+          image: {{ include "solicitudes-gov.imagen" (dict "Values" .Values "imagen" .Values.solicitudesService.imagen) }}
+          imagePullPolicy: {{ .Values.imagen.politicaDeDescarga }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.solicitudesService.puerto }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.solicitudesService.nombre }}-config
+          env:
+            - name: SQLSERVER_SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: sqlserver-sa-password
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: rabbitmq-user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: rabbitmq-password
+          # Actuator ya expone health con probes de liveness/readiness
+          # separadas (management.endpoint.health.probes.enabled=true en
+          # application.yml): /actuator/health/liveness no depende de que la
+          # base de datos responda, /readiness si. Usar el mismo endpoint
+          # para ambas habria hecho que un SQL Server lento tumbara pods que
+          # en realidad seguian vivos.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.solicitudesService.recursos | nindent 12 }}

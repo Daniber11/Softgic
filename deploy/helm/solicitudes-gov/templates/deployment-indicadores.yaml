@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.indicadoresService.nombre }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.indicadoresService.nombre }}
+    {{- include "solicitudes-gov.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.indicadoresService.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.indicadoresService.nombre }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.indicadoresService.nombre }}
+        {{- include "solicitudes-gov.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: {{ .Values.indicadoresService.nombre }}
+          image: {{ include "solicitudes-gov.imagen" (dict "Values" .Values "imagen" .Values.indicadoresService.imagen) }}
+          imagePullPolicy: {{ .Values.imagen.politicaDeDescarga }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.indicadoresService.puerto }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.indicadoresService.nombre }}-config
+          env:
+            - name: SQLSERVER_SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: sqlserver-sa-password
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: rabbitmq-user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externo.secretName }}
+                  key: rabbitmq-password
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.indicadoresService.recursos | nindent 12 }}

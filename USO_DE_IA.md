@@ -9,8 +9,9 @@
 
 | Herramienta | Uso |
 |---|---|
-| Claude Code | Implementación asistida bajo especificación previa |
-| ⟨otras⟩ | ⟨…⟩ |
+| Claude Code (Sonnet 5) | Implementación asistida bajo especificación previa, en seis sesiones (una por fase) |
+| Navegador integrado de Claude Code | Verificación manual en un navegador real de cada flujo del frontend (login, bandeja, detalle, acciones por rol, accesibilidad por teclado) antes de declarar una fase terminada |
+| Herramientas de shell (Docker, Maven en contenedor, pnpm) | Ejecutadas por el propio asistente para compilar, probar y verificar, nunca simuladas |
 
 ---
 
@@ -49,16 +50,16 @@ la ventana de contexto.
 
 | Actividad | Grado de apoyo | Observación |
 |---|---|---|
-| Estructura de módulos Maven | ⟨…⟩ | |
-| Implementación del agregado y la máquina de estados | ⟨…⟩ | Pruebas escritas antes que la implementación |
-| Adaptadores JPA y mappers | ⟨…⟩ | Código repetitivo, alto apoyo |
-| Publicador Outbox | ⟨…⟩ | Revisado línea a línea por el riesgo de pérdida de eventos |
-| Configuración de seguridad | ⟨…⟩ | Revisada línea a línea |
-| Configuración de Module Federation | ⟨…⟩ | Requirió depuración manual |
-| Migraciones SQL | ⟨…⟩ | |
-| Componentes React y vistas | ⟨…⟩ | |
-| Manifiestos Helm y pipeline | ⟨…⟩ | |
-| Documentación y diagramas | ⟨…⟩ | |
+| Estructura de módulos Maven | Alto | Generada siguiendo la regla de dependencia del blueprint; verificada compilando y con ArchUnit, no solo por inspección visual |
+| Implementación del agregado y la máquina de estados | Alto | Pruebas escritas antes que la implementación (`SolicitudTest`); la tabla de transiciones (`Accion`) es la única fuente de verdad, no hay lógica duplicada |
+| Adaptadores JPA y mappers | Alto | Código repetitivo, alto apoyo |
+| Publicador Outbox | Alto, con revisión propia adicional | Revisado línea a línea por el riesgo de pérdida de eventos; el defecto real de idempotencia (`save()` en vez de `INSERT` nativo) se encontró ejecutando el escenario A5 con datos reales, no por inspección de código |
+| Configuración de seguridad | Alto, con revisión propia adicional | Revisada línea a línea; las tres capas de defensa en profundidad (filtro, `@PreAuthorize`, dominio) se probaron manualmente con el usuario `sinrol1` |
+| Configuración de Module Federation | Medio | Requirió depuración manual extensa en el navegador: duplicación de `UserManager` entre shell y remoto, una carrera de hidratación del `authBridge`, y una carrera entre el token y Redux en el primer fetch del remoto — ninguno de estos tres defectos era visible por inspección de código, se encontraron inspeccionando el runtime de Module Federation en la consola del navegador |
+| Migraciones SQL | Alto | |
+| Componentes React y vistas | Alto, con verificación en navegador real | Cada vista se probó manualmente con los cinco usuarios de prueba antes de declarar la fase terminada; un defecto real de foco en el diálogo de observaciones (`autoFocus` no funcionaba con `TextField` multilínea) se encontró navegando por teclado, no leyendo el código |
+| Manifiestos Helm y pipeline | Alto, sin ejecución contra infraestructura real | `helm lint` y `helm template` se ejecutaron y verificaron contra los tres conjuntos de valores; el `.gitlab-ci.yml` se validó por sintaxis YAML, no contra un GitLab real (ver limitaciones) |
+| Documentación y diagramas | Alto | Los diagramas Mermaid se validaron sintácticamente de forma programática antes de darlos por completos |
 
 ---
 
@@ -95,8 +96,23 @@ Estas decisiones se tomaron por criterio de ingeniería propio y están registra
 
 ## 6. Limitaciones asumidas
 
-⟨Listar aquí lo que quedó diseñado pero no implementado, con la razón y el trabajo pendiente.
-Ser explícito: el reto penaliza más una promesa incumplida que una limitación declarada.⟩
+La lista completa, con la razón de cada una, vive en el README (§11 "Limitaciones y trabajo
+pendiente"), para que sea un único lugar de verdad. Resumen:
+
+- Sin Prometheus/Grafana en el Compose (Actuator ya expone `/actuator/prometheus`, listo para
+  ser scrapeado por un Prometheus externo).
+- Storybook cubre exactamente los dos componentes exigidos, no el resto del frontend.
+- Sin pruebas de integración con Testcontainers; la concurrencia (A2) y la idempotencia (A5) se
+  verificaron manualmente y quedan como evidencia en `docs/evidencias/`, no automatizadas
+  contra una base real en pipeline.
+- El chart de Helm se validó con `helm lint`/`helm template`, no con un despliegue real contra
+  un clúster Kubernetes.
+- `outbox_evento` no tiene purga automatizada.
+- Riesgo de colisión de `GeneradorCodigoAdapter` bajo concurrencia muy alta, mitigado solo por
+  la restricción `UNIQUE` de base de datos, declarado como riesgo abierto y no como defecto
+  oculto.
+- El `.gitlab-ci.yml` no se ejecutó contra un GitLab real: se validó por sintaxis YAML y
+  revisión manual de cada etapa.
 
 ---
 

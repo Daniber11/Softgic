@@ -1,0 +1,12 @@
+apiVersion: v2
+name: solicitudes-gov
+description: >-
+  Plataforma de Gestion de Solicitudes Operacionales - chart unico para los
+  cuatro componentes de aplicacion (solicitudes-service, indicadores-service,
+  shell, mfe-indicadores). Las dependencias de infraestructura (SQL Server,
+  RabbitMQ, Keycloak) no forman parte de este chart: en un ambiente real ya
+  existirian como servicios gestionados o charts propios; aqui se documentan
+  como prerequisitos externos (ver values.yaml, seccion "externo").
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

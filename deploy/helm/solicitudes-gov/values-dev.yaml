@@ -1,0 +1,17 @@
+# Ambiente de desarrollo: una replica de cada componente, recursos minimos.
+# Se invoca con: helm upgrade --install solicitudes-gov ./deploy/helm/solicitudes-gov -f values-dev.yaml
+
+imagen:
+  etiqueta: dev
+
+solicitudesService:
+  replicas: 1
+
+indicadoresService:
+  replicas: 1
+
+shell:
+  replicas: 1
+
+mfeIndicadores:
+  replicas: 1

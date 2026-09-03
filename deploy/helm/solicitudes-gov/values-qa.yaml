@@ -1,0 +1,33 @@
+# Ambiente de QA: dos replicas de los servicios de backend (los que
+# demuestran el patron Outbox bajo mas de una instancia compitiendo por el
+# mismo lote, ver ADR-002), recursos ligeramente mayores.
+# Se invoca con: helm upgrade --install solicitudes-gov ./deploy/helm/solicitudes-gov -f values-qa.yaml
+
+imagen:
+  etiqueta: qa
+
+solicitudesService:
+  replicas: 2
+  recursos:
+    requests:
+      cpu: 350m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+indicadoresService:
+  replicas: 2
+  recursos:
+    requests:
+      cpu: 350m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+shell:
+  replicas: 2
+
+mfeIndicadores:
+  replicas: 2

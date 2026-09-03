@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.solicitudesService.nombre }}-config
+  labels:
+    app.kubernetes.io/name: {{ .Values.solicitudesService.nombre }}
+    {{- include "solicitudes-gov.labels" . | nindent 4 }}
+data:
+  SOLICITUDES_SERVICE_PORT: {{ .Values.solicitudesService.puerto | quote }}
+  SQLSERVER_HOST: {{ .Values.externo.sqlserverHost | quote }}
+  SQLSERVER_PORT: {{ .Values.externo.sqlserverPort | quote }}
+  SQLSERVER_DB_OPERACIONAL: {{ .Values.solicitudesService.sqlserverDb | quote }}
+  RABBITMQ_HOST: {{ .Values.externo.rabbitmqHost | quote }}
+  RABBITMQ_PORT: {{ .Values.externo.rabbitmqPort | quote }}
+  KEYCLOAK_ISSUER_URI: {{ .Values.externo.keycloakIssuerUri | quote }}
+  KEYCLOAK_JWKS_URI: {{ .Values.externo.keycloakJwksUri | quote }}
+  CORS_ORIGENES_PERMITIDOS: {{ .Values.externo.corsOrigenesPermitidos | quote }}

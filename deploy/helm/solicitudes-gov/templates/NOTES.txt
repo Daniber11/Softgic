@@ -1,0 +1,16 @@
+Solicitudes Operacionales desplegado.
+
+Antes de instalar, el Secret referenciado en `externo.secretName`
+({{ .Values.externo.secretName }}) debe existir en el namespace de destino,
+con las claves: sqlserver-sa-password, rabbitmq-user, rabbitmq-password.
+
+  kubectl create secret generic {{ .Values.externo.secretName }} \
+    --from-literal=sqlserver-sa-password=<valor> \
+    --from-literal=rabbitmq-user=<valor> \
+    --from-literal=rabbitmq-password=<valor>
+
+Servicios desplegados:
+  - {{ .Values.solicitudesService.nombre }} (puerto {{ .Values.solicitudesService.puerto }})
+  - {{ .Values.indicadoresService.nombre }} (puerto {{ .Values.indicadoresService.puerto }})
+  - {{ .Values.shell.nombre }} (puerto 80)
+  - {{ .Values.mfeIndicadores.nombre }} (puerto 80)

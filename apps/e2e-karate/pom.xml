@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    Suite de aceptacion (Karate), independiente de los modulos Maven de cada
+    servicio: no ejercita codigo Java directamente, ejercita el contrato HTTP
+    contra el stack ya levantado por `docker compose up --build`.
+
+    Estrategia de autenticacion: obtiene tokens del cliente `karate-e2e` por
+    direct grant contra el Keycloak del stack local (karate-config.js). Ese
+    cliente existe exclusivamente para pruebas automatizadas; el cliente del
+    navegador, shell-web, usa Authorization Code + PKCE y rechaza direct
+    grant a proposito (BLUEPRINT 8.1).
+  -->
+
+  <groupId>co.gov.solicitudes</groupId>
+  <artifactId>e2e-karate</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+  <name>Aceptacion (Karate)</name>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <karate.version>1.4.1</karate.version>
+    <maven.install.skip>true</maven.install.skip>
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
+
+  <dependencies>
+    <!-- Trae junit-jupiter-api y junit-jupiter-engine de forma transitiva,
+         en la version que gestiona karate-parent; declararlas aqui aparte
+         arriesga un conflicto de version con lo que Karate espera. -->
+    <dependency>
+      <groupId>com.intuit.karate</groupId>
+      <artifactId>karate-junit5</artifactId>
+      <version>${karate.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!-- Los .feature viven junto a las clases del runner, no en resources
+         separados: es la convencion de Karate, y mantiene cada feature al
+         lado del contexto que lo ejecuta. -->
+    <testResources>
+      <testResource>
+        <directory>src/test/java</directory>
+        <excludes>
+          <exclude>**/*.java</exclude>
+        </excludes>
+      </testResource>
+    </testResources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
