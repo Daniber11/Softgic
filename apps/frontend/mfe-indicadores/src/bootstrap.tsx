@@ -9,7 +9,8 @@
 
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { Container, CssBaseline, ThemeProvider } from '@mui/material';
+import { temaSolicitudes } from '@shared/tema';
 
 import IndicadoresApp from './IndicadoresApp';
 import { userManagerStandalone } from './auth/authServiceStandalone';
@@ -20,11 +21,12 @@ const ID_RAIZ = 'raiz-indicadores';
 // Color deliberadamente distinto al del shell: si el remoto federado se pintara
 // con este morado en lugar del azul del host, seria la prueba visual de que hay
 // dos instancias de Emotion compitiendo.
-const temaStandalone = createTheme({
-  palette: {
-    primary: { main: '#6a1b9a' },
-  },
-});
+// Mismo tema que el host (vive en `shared`). En la fase 2 este tema era
+// morado a proposito, como sonda: si el remoto federado aparecia morado,
+// significaba que traia su propio Emotion en vez de heredar el del host. Esa
+// sonda ya cumplio su funcion y quedo verificada; mantenerla ahora solo
+// produciria dos identidades visuales para el mismo producto.
+const temaStandalone = temaSolicitudes;
 
 const contenedor = document.getElementById(ID_RAIZ);
 if (contenedor === null) {

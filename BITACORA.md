@@ -664,3 +664,45 @@ mvnd test   (apps/e2e-karate), contra el stack real vía la red de compose:
   Grafana en Compose, Testcontainers, despliegue Helm contra un clúster real, purga de
   `outbox_evento`, ejecución del pipeline contra un GitLab real) está declarado como
   limitación explícita en el README §11, no como trabajo olvidado.
+
+---
+
+## Cierre visual — 3 de septiembre de 2026
+
+### Completado
+- **Tema visual compartido** (`apps/frontend/shared/src/tema.ts`), consumido por el shell y por
+  el remoto. Vive en `shared` a proposito: dos `createTheme` distintos producen dos escalas de
+  color y de sombra, y la diferencia se nota justo en la frontera federada.
+- Paleta institucional con profundidad (azul en degradado, grises calidos), tipografia con
+  jerarquia real (tracking negativo en titulos, cifras tabulares), sombras en dos capas
+  (contacto + difusion) y radios consistentes.
+- **Barra superior** con degradado, subtitulo de producto y el rol como pastilla en vez de
+  texto suelto sobre la barra.
+- **Tabla de la bandeja** con encabezado diferenciado, filas con mas aire y `maxWidth="lg"`:
+  con el ancho por defecto las columnas de fecha se separaban del resto.
+- **Chips de estado y prioridad** en estilo "soft" (fondo tenue + borde del mismo tono) en vez
+  del relleno saturado de MUI: con varias filas, los chips solidos competian entre si.
+- **Barras del resumen analitico** con degradado, ancho minimo visible (antes un valor pequeño
+  frente al maximo quedaba en 1-2 px y parecia cero) y etiquetas presentadas como texto
+  (`ATENCION_CIUDADANA` -> `Atencion ciudadana`): el identificador tecnico de la dimension no
+  debe llegar al usuario final.
+- **Tiempo medio hasta resolucion** convertido en metrica destacada; como parrafo con un
+  divisor huerfano encima se leia como nota al pie, no como el indicador de negocio que es.
+- Alturas igualadas (`height: 100%`) en las tarjetas del detalle y de indicadores: las columnas
+  quedaban con altura dispar segun el contenido.
+
+### Verificado con
+```
+corepack pnpm exec tsc --noEmit   (shell y mfe-indicadores)   0 errores
+corepack pnpm test                (shell)                     30/30
+docker compose up -d --build shell mfe-indicadores            7/7 (healthy)
+Revision visual en navegador: bandeja, detalle e indicadores federados
+```
+
+### Decisiones tomadas
+- **El tema morado del remoto en modo standalone se retira.** En la fase 2 era una sonda
+  deliberada: si el remoto federado aparecia morado, significaba que traia su propio Emotion en
+  vez de heredar el del host. Esa sonda ya cumplio su funcion y quedo verificada; mantenerla
+  ahora solo produciria dos identidades visuales para el mismo producto.
+- **Sin libreria de graficos, otra vez.** Las barras mejoradas siguen siendo `Box` con
+  degradado: el salto visual no justificaba una dependencia nueva fuera del blueprint.

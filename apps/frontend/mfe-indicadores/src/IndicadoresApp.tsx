@@ -2,7 +2,6 @@ import * as React from 'react';
 import { Provider, useDispatch } from 'react-redux';
 import {
   Button,
-  Divider,
   Grid,
   Paper,
   Stack,
@@ -178,7 +177,7 @@ function ContenidoIndicadores(): React.JSX.Element {
 
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 6 }}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" component="h3" gutterBottom>
                 Por estado
               </Typography>
@@ -191,7 +190,7 @@ function ContenidoIndicadores(): React.JSX.Element {
           </Grid>
 
           <Grid size={{ xs: 12, md: 6 }}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" component="h3" gutterBottom>
                 Por categoría
               </Typography>
@@ -204,7 +203,7 @@ function ContenidoIndicadores(): React.JSX.Element {
           </Grid>
 
           <Grid size={12}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" component="h3" gutterBottom>
                 Tendencia diaria de registros
               </Typography>
@@ -217,12 +216,31 @@ function ContenidoIndicadores(): React.JSX.Element {
           </Grid>
 
           <Grid size={12}>
-            <Paper sx={{ p: 3 }}>
-              <Divider sx={{ mb: 2 }} />
-              <Typography variant="subtitle1">
-                Tiempo medio hasta resolución:{' '}
-                <strong>{resumen.data.promedioMinutosHastaResolucion} minutos</strong>
+            {/* Metrica destacada: es un solo numero, y como parrafo con un
+                divisor huerfano encima quedaba como una nota al pie en vez
+                del indicador de negocio que realmente es. */}
+            <Paper
+              sx={{
+                p: 3,
+                height: '100%',
+                backgroundImage: 'linear-gradient(135deg, #0B4F9E 0%, #083A75 100%)',
+                color: '#FFFFFF',
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                sx={{ color: 'rgba(255,255,255,0.78)', letterSpacing: '0.06em', textTransform: 'uppercase' }}
+              >
+                Tiempo medio hasta resolución
               </Typography>
+              <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mt: 1 }}>
+                <Typography sx={{ fontSize: '2.6rem', fontWeight: 700, lineHeight: 1 }}>
+                  {resumen.data.promedioMinutosHastaResolucion}
+                </Typography>
+                <Typography sx={{ color: 'rgba(255,255,255,0.78)', fontWeight: 500 }}>
+                  minutos
+                </Typography>
+              </Stack>
             </Paper>
           </Grid>
         </Grid>

@@ -137,7 +137,7 @@ export function DetalleSolicitudPage(): React.JSX.Element {
 
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" component="h3" gutterBottom>
               Detalle
             </Typography>
@@ -168,7 +168,7 @@ export function DetalleSolicitudPage(): React.JSX.Element {
         </Grid>
 
         <Grid size={{ xs: 12, md: 6 }}>
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" component="h3" gutterBottom>
               Línea de tiempo
             </Typography>

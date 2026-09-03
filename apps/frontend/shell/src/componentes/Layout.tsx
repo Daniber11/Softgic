@@ -50,29 +50,68 @@ export function Layout(): React.JSX.Element {
     ? location.pathname
     : false;
 
+  const etiquetaRoles = auth.roles.map((r) => ETIQUETA_ROL[r]).join(', ');
+
   return (
-    <Box>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
-            Solicitudes Operacionales
-          </Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
+    // minHeight 100dvh + fondo del tema: sin esto, en pantallas con poco
+    // contenido el area bajo el contenido queda blanca y la pagina parece
+    // cortada a la mitad.
+    <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default' }}>
+      <AppBar position="sticky" elevation={0}>
+        <Toolbar sx={{ gap: 2 }}>
+          <Stack sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="h6" component="h1" sx={{ lineHeight: 1.2 }}>
+              Solicitudes Operacionales
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.72)' }}>
+              Plataforma de gestión y trazabilidad
+            </Typography>
+          </Stack>
+
+          <Stack direction="row" spacing={1.5} alignItems="center">
             {auth.roles.length > 0 ? (
-              <Typography variant="body2" aria-label={`Rol actual: ${auth.roles.map((r) => ETIQUETA_ROL[r]).join(', ')}`}>
-                {auth.roles.map((r) => ETIQUETA_ROL[r]).join(', ')}
-              </Typography>
+              // El rol como "pastilla" y no como texto suelto: es un dato de
+              // identidad, y suelto sobre la barra se leia como una etiqueta
+              // decorativa mas.
+              <Box
+                aria-label={`Rol actual: ${etiquetaRoles}`}
+                sx={{
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 999,
+                  bgcolor: 'rgba(255,255,255,0.14)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {etiquetaRoles}
+              </Box>
             ) : null}
-            <Button color="inherit" onClick={() => void auth.cerrarSesion()}>
+            <Button
+              color="inherit"
+              onClick={() => void auth.cerrarSesion()}
+              sx={{
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.28)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+              }}
+            >
               Cerrar sesión
             </Button>
           </Stack>
         </Toolbar>
+
         <Tabs
           value={valorActivo}
           textColor="inherit"
-          indicatorColor="secondary"
           aria-label="Navegación principal"
+          sx={{
+            px: 1,
+            borderTop: '1px solid rgba(255,255,255,0.14)',
+            '& .MuiTabs-indicator': { height: 3, borderRadius: '3px 3px 0 0', bgcolor: '#7FD1C1' },
+          }}
         >
           {pestaniasVisibles.map((p) => (
             <Tab key={p.ruta} label={p.etiqueta} value={p.ruta} component={RouterLink} to={p.ruta} />
@@ -80,7 +119,9 @@ export function Layout(): React.JSX.Element {
         </Tabs>
       </AppBar>
 
-      <Container component="main" sx={{ py: 4 }}>
+      {/* maxWidth lg: con el ancho por defecto la tabla de la bandeja quedaba
+          estirada y las columnas de fecha se separaban del resto. */}
+      <Container component="main" maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
         <Outlet />
       </Container>
     </Box>

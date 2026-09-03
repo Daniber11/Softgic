@@ -8,22 +8,20 @@
 
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
+import { temaSolicitudes } from '@shared/tema';
 
 import App from './App';
 import { store } from './store/store';
 
 const ID_RAIZ = 'raiz-shell';
 
-// Azul institucional del host. El remoto en modo standalone usa morado; si el
-// remoto federado apareciera morado, habria dos instancias de Emotion.
-const temaDelHost = createTheme({
-  palette: {
-    primary: { main: '#1565c0' },
-  },
-});
+// El tema vive en `shared` y lo comparten host y remoto: dos createTheme
+// distintos producirian dos escalas de color y sombra, y la diferencia se
+// nota justo en la frontera federada.
+const temaDelHost = temaSolicitudes;
 
 const contenedor = document.getElementById(ID_RAIZ);
 if (contenedor === null) {
